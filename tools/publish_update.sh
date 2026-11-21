@@ -4,7 +4,7 @@
 set -euo pipefail
 APK="$1"; NOTES="${2:-}"
 REPO="jt-coder321/hilo"
-BADGING=$("${ANDROID_HOME:-$HOME/android-sdk}"/build-tools/35.0.0/aapt dump badging "$APK" | head -1)
+BADGING=$("${ANDROID_HOME:-$HOME/android-sdk}"/build-tools/35.0.0/aapt dump badging "$APK" | sed -n 1p)
 CODE=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<<"$BADGING")
 NAME=$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$BADGING")
 SHA=$(sha256sum "$APK" | cut -d' ' -f1)
