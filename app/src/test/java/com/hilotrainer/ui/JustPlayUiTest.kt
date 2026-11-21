@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.hilotrainer.engine.Action
 import com.hilotrainer.engine.Phase
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -170,6 +171,18 @@ abstract class JustPlayShotBase {
     @Test fun menuStats() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-stats") { CasualMenu(v, 3, {}) {} } }
     @Test fun menuAwards() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-awards") { CasualMenu(v, 4, {}) {} } }
     @Test fun menuLook() { val v = table(); shoot("jp-look") { CasualMenu(v, 1, {}) {} } }
+    @Test fun faces() {
+        val looks = com.hilotrainer.engine.Cast.ALL.map { it.name to it.look } + com.hilotrainer.engine.CasualDealers.ALL.map { it.name to it.look }
+        shoot("jp-faces") {
+            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0F5A37))) {
+                looks.chunked(4).forEachIndexed { r, row ->
+                    androidx.compose.foundation.layout.Row {
+                        row.forEachIndexed { i, (n, l) -> Avatar(l, 100.dp, mood = Mood.entries[(r * 4 + i) % Mood.entries.size], dealer = n in setOf("Vera", "Danny", "Mr. Grant"), name = n) }
+                    }
+                }
+            }
+        }
+    }
     @Test fun broke() {
         val v = table(60, CasualSettings(tableMin = 100))
         v.store.bankroll = 50
