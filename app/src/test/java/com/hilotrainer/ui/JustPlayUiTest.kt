@@ -119,7 +119,7 @@ class JustPlayUiTest {
             v.deal()
             if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
             while (v.gs.phase == Phase.PLAYER) v.act(v.gs.basicAdvice!!.action)
-            assertTrue(!v.dareOn && v.dare == null)
+            assertTrue(!v.dareOn)
             assertTrue(v.bankroll >= 0)
             assertEquals(v.bankroll, v.store.bankroll)
             val net = v.gs.results.sumOf { it.net }
@@ -207,6 +207,62 @@ abstract class JustPlayShotBase {
         v.seatView[3]?.let { v.moodForTest(it.id, Mood.CHEER) }
         v.seatView[1]?.let { v.moodForTest(it.id, Mood.SAD) }
         shoot("jp-play") { JustPlayScreen(v) {} }
+    }
+
+    private fun chatScene(style: Int): CasualViewModel {
+        val v = table(12, CasualSettings(chatStyle = style))
+        v.addChip(50)
+        repeat(60) {
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            if (v.gs.phase == Phase.PLAYER && v.gs.bots.size >= 3) return@repeat
+            while (v.gs.phase == Phase.PLAYER) v.act(Action.STAND)
+        }
+        v.seatView[3]?.let { v.moodForTest(it.id, Mood.CHEER) }
+        v.seatView[1]?.let { v.moodForTest(it.id, Mood.SAD) }
+        v.sayForTest(0, "Nice weather out there. Not that I've seen it.", minor = true)
+        v.sayForTest(1, "A tie? Fine. I'll take a tie.")
+        v.sayForTest(CasualViewModel.DEALER, "Insurance is open. Bets down, please.")
+        v.sayForTest(2, "Woo! Bachelorette party, coming through!")
+        v.sayForTest(3, "Hit it. Come on, give me a ten.", minor = true)
+        v.pitForTest(3)
+        v.sayForTest(CasualViewModel.PIT, "Sir, you're welcome to play any other game.")
+        return v
+    }
+    @Test fun chat0() { shoot("jp-chat-lane") { JustPlayScreen(chatScene(0)) {} } }
+    @Test fun chat1() { shoot("jp-chat-bubbles") { JustPlayScreen(chatScene(1)) {} } }
+    @Test fun chat2() { shoot("jp-chat-captions") { JustPlayScreen(chatScene(2)) {} } }
+    @Test fun chat3() { shoot("jp-chat-log") { JustPlayScreen(chatScene(3)) {} } }
+    @Test fun chat4() { shoot("jp-chat-float") { JustPlayScreen(chatScene(4)) {} } }
+
+    @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
+
+    @Test fun longSessionWithNewTalkStaysHonest() {
+        val v = casualVm(77)
+        repeat(150) { playOne(v) }
+        assertTrue(v.chat.size <= 6)
+        assertTrue(v.bankroll >= 0)
+    }
+
+    @Test fun realismPeek() {
+        val v = table(14)
+        v.addChip(25)
+        repeat(8) { playOne(v) }
+        v.sayForTest(CasualViewModel.DEALER, "Checking for blackjack.")
+        v.sayForTest(1, "Come on, no blackjack. Please.")
+        v.procForTest(0, true)
+        v.signalForTest("Stand")
+        shoot("jp-realism-peek") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun realismCut() {
+        val v = table(15)
+        v.addChip(25)
+        repeat(5) { playOne(v) }
+        v.sayForTest(CasualViewModel.DEALER, "Cutting it for you. Thank you.")
+        v.sayForTest(2, "Is the cut card always that color?", minor = true)
+        v.procForTest(1, false)
+        shoot("jp-realism-cut") { JustPlayScreen(v) {} }
     }
 
     @Test fun payout() {

@@ -26,6 +26,28 @@ class JustPlayTest {
         lines.forEach { assertFalse(it, it.contains('—') || it.contains('–')) }
     }
 
+    @Test fun sevenHundredUniqueLinesNoDashes() {
+        val lines = TableTalk.allLines().distinct()
+        assertTrue("only ${lines.size} unique lines", lines.size >= 700)
+        lines.forEach { assertFalse(it, it.contains('\u2014') || it.contains('\u2013') || it.contains(" - ")) }
+        val extra = MoreTalk.allLines().distinct()
+        assertTrue("only ${extra.size} new lines", extra.size >= 400)
+    }
+
+    @Test fun everyNewMomentHasLinesForMostPlayers() {
+        val r = Random(11)
+        val moments = listOf(Talk.DEALER_WEAK, Talk.DEALER_STRONG, Talk.NEW_PLAYER, Talk.SHUFFLE, Talk.YOU_BUST, Talk.YOU_LOSE_BIG, Talk.DOUBLE, Talk.TIP, Talk.ETIQUETTE_REPLY)
+        for (t in moments) {
+            TableTalk.resetMemory()
+            val got = Archetype.entries.count { TableTalk.say(it, t, r) != null }
+            val need = when (t) { Talk.TIP -> MoreTalk.tippers.size; Talk.ETIQUETTE_REPLY -> MoreTalk.forgetful.size; else -> 8 }
+            assertTrue("$t only $got players have a line", got >= need)
+        }
+        listOf("peek", "cut", "burn", "ins", "nobj", "welcome", "thanks", "etiquette", "double", "split").forEach { k ->
+            listOf("Vera", "Danny", "Mr. Grant").forEach { n -> assertTrue("$n $k", MoreTalk.dealerSays(n, k, r).isNotBlank()) }
+        }
+    }
+
     @Test fun talkAvoidsRepeats() {
         TableTalk.resetMemory()
         val r = Random(3)

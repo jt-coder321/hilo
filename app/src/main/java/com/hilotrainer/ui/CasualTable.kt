@@ -9,6 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -109,7 +111,11 @@ fun CasualChipStack(amount: Int, size: Dp, modifier: Modifier = Modifier) {
         out
     }
     Box(modifier.size(size, size + size * 0.1f * (chips.size - 1).coerceAtLeast(0)), contentAlignment = Alignment.BottomCenter) {
-        chips.forEachIndexed { i, s -> CasinoChip(s, size, Modifier.offset(y = -(size * 0.1f) * i), label = i == chips.size - 1) }
+        chips.forEachIndexed { i, s ->
+            // Real stacks are never perfectly square: each chip sits a hair off the one below.
+            val jx = ((i * 37 + amount / 5) % 5 - 2) * 0.012f
+            CasinoChip(s, size, Modifier.offset(x = size * jx, y = -(size * 0.1f) * i), label = i == chips.size - 1)
+        }
     }
 }
 
@@ -253,6 +259,7 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp, onWheel: () -> Unit) {
         }
     }
     if (vm.shuffling) ShuffleShow(vm.dealer.shuffle, Modifier.offset(w / 2 - 70.dp, dz + 8.dp))
+    if (vm.proc != 0) ShoeProc(vm.proc, shoe, tray, w / 2, youTop)
 
     // Other players.
     for (i in 0 until SEATS) {
@@ -275,18 +282,190 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp, onWheel: () -> Unit) {
         else DpOffset(seatXdp(seat) - 10.dp, seatYdp(seat) + sCard * 1.4f + 11.dp)
     }
 
-    // Everything people say, in order, in one lane that nothing else draws over.
-    run {
-        val top = dz + dCard * 1.4f + 14.dp + 50.dp
-        val bottom = seatYdp(0) - 6.dp
-        val fh = (bottom - top).coerceIn(60.dp, 132.dp)
-        ChatFeed(vm, Modifier.offset(w * 0.04f, top).width(w * 0.92f).height(fh))
-    }
+    ChatLayer(vm, w, dz, dCard, dealerSize, seatXdp, seatYdp, youTop)
     FunBadges(vm, onWheel, Modifier.offset(6.dp, 4.dp))
     // How your round went, over the felt printing.
     vm.banner?.let { b -> key(b.key) { ResultBanner(b, Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 6.dp)) } }
 }
 
+
+/** Table talk, drawn in the style the player picked. Every style keeps every line readable and avoids overlap. */
+@Composable
+private fun ChatLayer(vm: CasualViewModel, w: Dp, dz: Dp, dCard: Dp, dealerSize: Dp, seatX: (Int) -> Dp, seatY: (Int) -> Dp, youTop: Dp) {
+    val feedTop = dz + dCard * 1.4f + 14.dp + 50.dp
+    val fh = (seatY(0) - 6.dp - feedTop).coerceIn(60.dp, 132.dp)
+    when (vm.settings.chatStyle) {
+        1 -> { BubbleLayer(vm, w, dz, dCard, seatX, seatY, floating = false); BubbleDare(vm, w, feedTop + fh - 46.dp) }
+        4 -> { BubbleLayer(vm, w, dz, dCard, seatX, seatY, floating = true); BubbleDare(vm, w, feedTop + fh - 46.dp) }
+        2 -> Captions(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh))
+        3 -> TableLog(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh))
+        else -> ChatFeed(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh))
+    }
+}
+
+/** The dare offer, for chat styles that have no lane of their own. */
+@Composable
+private fun BubbleDare(vm: CasualViewModel, w: Dp, top: Dp) {
+    if (vm.dare != null && !vm.dareOn && vm.canBet) DareRow(vm, Modifier.offset(w * 0.04f, top).width(w * 0.92f))
+}
+
+private data class Placed(val l: ChatLine, val x: Float, val y: Float, val w: Float, val h: Float, val tailX: Float?, val minor: Boolean)
+
+/** One bubble per speaker, anchored to them. Bubbles that would touch are moved up (or down) until they don't. */
+private fun layoutBubbles(lines: List<ChatLine>, w: Float, dz: Float, dealerBottom: Float, seatX: (Int) -> Float, seatY: (Int) -> Float, seatW: Float, occupied: List<Int>, floating: Boolean): List<Placed> {
+    val latest = lines.groupBy { it.who }.map { it.value.last() }
+    class Anchor(val cx: Float, val y: Float, val down: Boolean)
+    fun anchor(l: ChatLine): Anchor = when {
+        l.who == CasualViewModel.DEALER -> Anchor(w / 2 + 30f, dealerBottom, true)
+        l.who == CasualViewModel.PIT -> Anchor(w - 90f, dz * 0.68f + 28f, true)
+        else -> Anchor(seatX(l.who), seatY(l.who) - 2f, false)
+    }
+    val out = ArrayList<Placed>()
+    for (l in latest.sortedByDescending { Math.abs(anchor(it).cx - w / 2) }) {
+        val a = anchor(l)
+        val minor = floating && l.minor
+        val cw = if (minor) 6.0f else 6.4f
+        val bw = (l.text.length * cw + 26f).coerceIn(74f, if (minor) 150f else 168f).coerceAtMost(w - 8f)
+        val lines2 = Math.ceil((l.text.length * cw / (bw - 20f)).toDouble()).toInt().coerceIn(1, 3)
+        val bh = 15f * lines2 + (if (minor) 6f else 12f) + (if (a.down) 0f else 6f)
+        val x0 = (a.cx - bw / 2).coerceIn(4f, w - bw - 4f)
+        var x = x0; var y = 0f
+        search@ for (level in 0..6) {
+            for (dx in listOf(0f, -28f, 28f, -56f, 56f, -84f, 84f, -112f, 112f, -140f, 140f)) {
+                val cx0 = (x0 + dx).coerceIn(4f, w - bw - 4f)
+                val cy0 = if (a.down) a.y + level * (bh + 4f) else a.y - bh - level * (bh + 4f)
+                val clash = out.any { o -> cx0 < o.x + o.w + 4f && o.x < cx0 + bw + 4f && cy0 < o.y + o.h + 3f && o.y < cy0 + bh + 3f } ||
+                    occupied.any { i -> i != l.who && cx0 < seatX(i) + seatW * 0.47f && seatX(i) - seatW * 0.47f < cx0 + bw && cy0 < seatY(i) + 52f && seatY(i) < cy0 + bh }
+                if (!clash || level == 6) { x = cx0; y = cy0; break@search }
+            }
+        }
+        out += Placed(l, x, y, bw, bh, if (a.down) null else (a.cx - x).coerceIn(14f, bw - 14f), minor)
+    }
+    return out
+}
+
+@Composable
+private fun BubbleLayer(vm: CasualViewModel, w: Dp, dz: Dp, dCard: Dp, seatX: (Int) -> Dp, seatY: (Int) -> Dp, floating: Boolean) {
+    val occupied = (0 until SEATS).filter { vm.seatView[it] != null }
+    val placed = layoutBubbles(vm.chat.toList(), w.value, dz.value, (dz + dCard * 1.4f + 8.dp).value, { seatX(it).value }, { seatY(it).value }, (w / 4.6f).value, occupied, floating)
+    placed.forEach { p -> key(p.l.key) { AnchoredBubble(p, Modifier.offset(p.x.dp, p.y.dp).width(p.w.dp)) } }
+}
+
+@Composable
+private fun AnchoredBubble(p: Placed, modifier: Modifier) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 600f)) }
+    val col = speakerColor(p.l.who)
+    if (p.minor) {
+        // Small talk: plain words floating up from them, with a little icon.
+        Row(modifier.graphicsLayer { alpha = a.value.coerceIn(0f, 1f) * 0.92f; translationY = (1f - a.value) * 10.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
+            ReactionIcon(p.l.key.toInt(), col, Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(p.l.text, fontSize = 12.sp, lineHeight = 15.sp, color = Cream, fontWeight = FontWeight.Medium, style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(Color.Black, Offset(0f, 2f), 6f)))
+        }
+        return
+    }
+    val dark = p.l.who == CasualViewModel.PIT
+    Column(modifier.graphicsLayer { scaleX = 0.7f + 0.3f * a.value; scaleY = scaleX; alpha = a.value.coerceIn(0f, 1f); transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f) }) {
+        Text(
+            p.l.text, fontSize = 12.sp, lineHeight = 15.sp, color = if (dark) Cream else Ink, fontWeight = FontWeight.Medium,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (dark) Color(0xF01B1B1F) else Color(0xF7FFFDF6))
+                .border(1.dp, if (dark) col.copy(alpha = 0.7f) else Color(0x33000000), RoundedCornerShape(12.dp)).padding(horizontal = 8.dp, vertical = 5.dp),
+        )
+        if (p.tailX != null) Canvas(Modifier.fillMaxWidth().height(6.dp)) {
+            val tx = p.tailX.dp.toPx()
+            val path = androidx.compose.ui.graphics.Path().apply { moveTo(tx - 5.dp.toPx(), 0f); lineTo(tx + 5.dp.toPx(), 0f); lineTo(tx, size.height); close() }
+            drawPath(path, if (dark) Color(0xF01B1B1F) else Color(0xF7FFFDF6))
+        }
+    }
+}
+
+/** A tiny hand drawn icon for small talk: a smile, a star or a heart. */
+@Composable
+private fun ReactionIcon(seed: Int, color: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val c = center; val r = size.minDimension / 2
+        when (((seed % 3) + 3) % 3) {
+            0 -> {
+                drawCircle(color, r); drawCircle(Ink, r * 0.12f, Offset(c.x - r * 0.35f, c.y - r * 0.2f)); drawCircle(Ink, r * 0.12f, Offset(c.x + r * 0.35f, c.y - r * 0.2f))
+                drawArc(Ink, 20f, 140f, false, Offset(c.x - r * 0.5f, c.y - r * 0.35f), androidx.compose.ui.geometry.Size(r, r * 0.9f), style = Stroke(r * 0.18f, cap = StrokeCap.Round))
+            }
+            1 -> {
+                val p = androidx.compose.ui.graphics.Path()
+                for (i in 0 until 10) { val rr = if (i % 2 == 0) r else r * 0.45f; val a = (-90 + i * 36) * Math.PI / 180; val x = c.x + (rr * Math.cos(a)).toFloat(); val y = c.y + (rr * Math.sin(a)).toFloat(); if (i == 0) p.moveTo(x, y) else p.lineTo(x, y) }
+                p.close(); drawPath(p, color)
+            }
+            else -> {
+                val p = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(c.x, c.y + r * 0.9f); cubicTo(c.x - r * 1.5f, c.y - r * 0.1f, c.x - r * 0.6f, c.y - r * 1.1f, c.x, c.y - r * 0.3f)
+                    cubicTo(c.x + r * 0.6f, c.y - r * 1.1f, c.x + r * 1.5f, c.y - r * 0.1f, c.x, c.y + r * 0.9f); close()
+                }
+                drawPath(p, color)
+            }
+        }
+    }
+}
+
+/** Film style captions: the last two lines, centered, no boxes. */
+@Composable
+private fun Captions(vm: CasualViewModel, modifier: Modifier) {
+    val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
+    val lines = vm.chat.toList().takeLast(if (dareShown) 2 else 3)
+    Column(
+        modifier.clip(androidx.compose.ui.graphics.RectangleShape)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = if (lines.isEmpty()) 0f else 0.32f)))),
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom), horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        lines.forEachIndexed { i, l ->
+            key(l.key) {
+                val a = remember { Animatable(0f) }
+                val fade = remember { Animatable(1f) }
+                LaunchedEffect(Unit) { a.animateTo(1f, tween(260)) }
+                LaunchedEffect(Unit) { if (!vm.instant) { delay(4300L + l.text.length * 60L); fade.animateTo(0f, tween(800)) } }
+                val dim = if (i == lines.size - 1) 1f else if (i == lines.size - 2) 0.75f else 0.5f
+                Text(
+                    androidx.compose.ui.text.buildAnnotatedString {
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = speakerColor(l.who), fontWeight = FontWeight.Black, letterSpacing = 1.sp, fontSize = 11.sp)); append(l.name.uppercase().ifEmpty { "SOMEONE" }); pop()
+                        append("   "); append(l.text)
+                    },
+                    fontSize = 15.sp, lineHeight = 19.sp, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, maxLines = 2,
+                    style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(Color.Black, Offset(0f, 2f), 8f)),
+                    modifier = Modifier.graphicsLayer { alpha = a.value * dim * fade.value },
+                )
+            }
+        }
+        if (dareShown) DareRow(vm, Modifier.fillMaxWidth())
+    }
+}
+
+/** A quiet log: one line per remark with a colored bar, no boxes. */
+@Composable
+private fun TableLog(vm: CasualViewModel, modifier: Modifier) {
+    Column(modifier.clip(androidx.compose.ui.graphics.RectangleShape), verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.Bottom)) {
+        val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
+        val lines = vm.chat.toList().takeLast(if (dareShown) 3 else 4)
+        lines.forEachIndexed { i, l ->
+            key(l.key) {
+                val a = remember { Animatable(0f) }
+                LaunchedEffect(Unit) { a.animateTo(1f, tween(260)) }
+                val dim = 0.5f + 0.5f * (i + 1f) / lines.size
+                val col = speakerColor(l.who)
+                Row(Modifier.graphicsLayer { alpha = a.value * dim; translationX = (1f - a.value) * -16.dp.toPx() }.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+                    Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(col))
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            pushStyle(androidx.compose.ui.text.SpanStyle(color = col, fontWeight = FontWeight.Black, fontSize = 11.sp)); append(l.name.ifEmpty { "Someone" }); pop()
+                            append("  "); append(l.text)
+                        },
+                        fontSize = 13.sp, lineHeight = 16.sp, color = Cream, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        if (dareShown) DareRow(vm, Modifier.fillMaxWidth())
+    }
+}
 
 private val SeatColors = listOf(Color(0xFFFFB74D), Color(0xFF81D4FA), Color(0xFFA5D6A7), Color(0xFFF48FB1))
 private fun speakerColor(who: Int): Color = when {
@@ -300,7 +479,7 @@ private fun speakerColor(who: Int): Color = when {
 private fun ChatFeed(vm: CasualViewModel, modifier: Modifier) {
     Column(modifier.clip(androidx.compose.ui.graphics.RectangleShape), verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom), horizontalAlignment = Alignment.CenterHorizontally) {
         val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
-        val lines = vm.chat.toList().let { if (dareShown) it.takeLast(2) else it }
+        val lines = vm.chat.toList().takeLast(if (dareShown) 2 else 4)
         lines.forEachIndexed { i, l -> key(l.key) { ChatRow(l, lines.size - 1 - i) } }
         if (dareShown) DareRow(vm, Modifier.fillMaxWidth())
     }
@@ -359,6 +538,7 @@ private fun dealerGaze(vm: CasualViewModel, g: Int): Offset {
     val r = vm.reach
     val from = 0.1f
     return when {
+        vm.peeking -> Offset(0f, 1f)
         r != null -> when { r.target == CasualViewModel.DEALER -> Offset(0f, 0.9f); r.target >= CasualViewModel.YOU -> Offset(0f, 0.8f); else -> dirTo(0.5f, from, SeatX[r.target.coerceIn(0, 3)], 0.72f) }
         g < 3 -> Offset(0f, 0.8f)
         g == 3 -> dirTo(0.5f, from, SeatX[1], 0.72f)
@@ -396,6 +576,7 @@ private fun DealerZone(vm: CasualViewModel, w: Dp, dz: Dp, size: Dp, seatX: (Int
     Box(Modifier.offset(w / 2 - size / 2, 0.dp).graphicsLayer { translationX = slide.value * w.value * density.density * 0.7f }) {
         val dg = dealerGaze(vm, rememberGlance(901L + shownIdx))
         Avatar(dealer.look, size, mood = if (shownIdx == vm.dealerIdx) vm.dealerMood else Mood.NEUTRAL, talking = vm.bubbles.containsKey(CasualViewModel.DEALER), phase = 0.3f, walking = walking, dealer = true, name = "Dealer ${dealer.name}", gazeX = dg.x, gazeY = dg.y)
+        if (vm.peeking) Text("Peeking", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.align(Alignment.TopEnd).offset(x = -size * 0.05f, y = size * 0.12f).background(Cream, RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 1.dp))
         Text(dealer.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, modifier = Modifier.align(Alignment.TopStart).offset(x = size * 0.02f, y = size * 0.12f).background(Gold, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp))
     }
     // The dealing hand stays next to the shoe. To pitch a card it flicks a short way toward the seat, and the
@@ -432,6 +613,28 @@ private fun DealerZone(vm: CasualViewModel, w: Dp, dz: Dp, size: Dp, seatX: (Int
         val lh = Offset((w / 2 - size * 0.4f).toPx(), (size * 0.88f).toPx())
         drawLine(sleeve, sl, lh, (size * 0.1f).toPx(), StrokeCap.Round)
         drawCircle(skin, (size * 0.055f).toPx(), lh)
+    }
+}
+
+/** Shoe procedure: the player's yellow cut card goes into the shoe, then the dealer burns the top card into the tray. */
+@Composable
+private fun ShoeProc(stage: Int, shoe: DpOffset, tray: DpOffset, midX: Dp, youTop: Dp) {
+    val p = remember(stage) { Animatable(0f) }
+    LaunchedEffect(stage) { p.animateTo(1f, tween(if (stage == 1) 800 else 650, easing = FastOutSlowInEasing)) }
+    val dens = LocalDensity.current.density
+    if (stage == 1) {
+        val fromX = midX.value + 20f; val fromY = youTop.value
+        Box(
+            Modifier.offset(shoe.x - 14.dp, shoe.y - 10.dp).size(28.dp, 18.dp).graphicsLayer {
+                translationX = (fromX - shoe.x.value) * dens * (1f - p.value); translationY = (fromY - shoe.y.value) * dens * (1f - p.value)
+                rotationZ = -12f * (1f - p.value)
+            }.clip(RoundedCornerShape(2.dp)).background(Color(0xFFF2D14B)).border(1.dp, Color(0xFF8A6D00), RoundedCornerShape(2.dp)).semantics { contentDescription = "Cut card" },
+        )
+    } else {
+        CardBack(22.dp, Modifier.offset(shoe.x - 11.dp, shoe.y - 14.dp).graphicsLayer {
+            translationX = (tray.x.value - shoe.x.value) * dens * p.value; translationY = (tray.y.value - shoe.y.value) * dens * p.value
+            rotationZ = 24f * p.value; alpha = 1f - 0.4f * p.value
+        })
     }
 }
 
@@ -564,6 +767,11 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
             translationX = (tray.x.value - w.value / 2) * dens * sweep; translationY = (tray.y.value - top.value) * dens * sweep
             alpha = 1f - sweep; scaleX = 1f - 0.5f * sweep; scaleY = 1f - 0.5f * sweep
         }) {
+        vm.actions[CasualViewModel.YOU]?.let { sig ->
+            Box(Modifier.offset(0.dp, top - 26.dp).width(w), contentAlignment = Alignment.Center) {
+                Text(sig, fontSize = 12.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.background(Gold, RoundedCornerShape(50)).padding(horizontal = 9.dp, vertical = 1.dp))
+            }
+        }
         hands.forEachIndexed { hi, h ->
             val cards = h.cards.zip(h.seqs).filter { it.second < vm.shown }
             val step = minOf(cw * 0.38f, ((slotW - cw) / (cards.size - 1).coerceAtLeast(1)).coerceAtLeast(9.dp))

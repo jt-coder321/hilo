@@ -6,6 +6,7 @@ import kotlin.random.Random
 enum class Talk {
     ARRIVE, WIN, BIG_WIN, LOSE, BUST, BLACKJACK, PUSH, DEALER_BUST, YOU_BLACKJACK, YOU_BIG_WIN,
     WIN_STREAK, LOSS_STREAK, BIG_BET, REBUY, IDLE, REPLY, BUSTED_OUT, WIN_GOAL, COLD_SHOE, TILT, BACKOFF_REPLY,
+    DEALER_WEAK, DEALER_STRONG, NEW_PLAYER, SHUFFLE, YOU_BUST, YOU_LOSE_BIG, PEEK, DOUBLE, TIP, ETIQUETTE_REPLY,
 }
 
 /**
@@ -17,7 +18,8 @@ object TableTalk {
     private fun only(vararg a: Archetype) = a.toSet()
 
     /** (who, when, lines). An archetype with no line of its own for a moment uses the shared lines. */
-    private val PLAYER: List<Triple<Set<Archetype>, Talk, List<String>>> = listOf(
+    private val PLAYER: List<Triple<Set<Archetype>, Talk, List<String>>> by lazy { BASE + MoreTalk.player }
+    private val BASE: List<Triple<Set<Archetype>, Talk, List<String>>> = listOf(
         // Tourists and party guests
         Triple(only(Archetype.TOURIST), Talk.WIN, listOf("Woo! Vacation's paying for itself!", "Honey, I'm winning! Oh, she can't hear me.", "Is it always this easy?")),
         Triple(only(Archetype.TOURIST), Talk.LOSE, listOf("Shoot. Well, it's only money.", "That's a souvenir I didn't want.", "Back home this would be a nice dinner.")),
@@ -133,7 +135,7 @@ object TableTalk {
 
     /** Every distinct line, for counting and for checking punctuation. */
     fun allLines(): List<String> =
-        (PLAYER.flatMap { it.third } + PIT.values.flatten() +
+        (PLAYER.flatMap { it.third } + MoreTalk.allLines() + PIT.values.flatten() +
             Cast.ALL.flatMap { it.hello + it.bye } +
             CasualDealers.ALL.flatMap { it.greet + it.chatter + it.onBust + it.onBlackjack + it.onPlayerBlackjack + it.shiftOut }).distinct()
 

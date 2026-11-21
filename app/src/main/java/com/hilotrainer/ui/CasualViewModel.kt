@@ -35,6 +35,7 @@ import com.hilotrainer.engine.RoundSummary
 import com.hilotrainer.engine.Seat
 import com.hilotrainer.engine.TableEvent
 import com.hilotrainer.engine.TableLife
+import com.hilotrainer.engine.MoreTalk
 import com.hilotrainer.engine.TableTalk
 import com.hilotrainer.engine.Talk
 import com.hilotrainer.engine.TwentyOnePlusThree
@@ -67,7 +68,7 @@ data class PitState(val seat: Int, val key: Long)
 /** A perk or surprise shown as a toast: a comp, an invitation, a rush. */
 data class Perk(val id: Long, val title: String, val desc: String)
 
-data class ChatLine(val key: Long, val who: Int, val name: String, val text: String)
+data class ChatLine(val key: Long, val who: Int, val name: String, val text: String, val minor: Boolean = false)
 
 /**
  * Just Play: blackjack for fun. No count, no coaching, no grading. A persistent bankroll,
@@ -113,6 +114,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     private var shiftRounds = 0
     var pit by mutableStateOf<PitState?>(null); private set
     var shuffling by mutableStateOf(false); private set
+    /** True while the dealer looks at the hole card to check for blackjack. */
+    var peeking by mutableStateOf(false); private set
+    /** Shoe procedure shown at the dealer: 0 none, 1 cut card going in, 2 burn card to the tray. */
+    var proc by mutableStateOf(0); private set
+    private var peekPending = false
     var banner by mutableStateOf<CasualBanner?>(null); private set
     /** The dealer is sweeping last round's cards into the discard tray. */
     var sweeping by mutableStateOf(false); private set
@@ -270,7 +276,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         while (i in usedBanter && tries++ < 30) i = rnd.nextInt(FunTalk.banter.size)
         usedBanter += i; if (usedBanter.size >= FunTalk.banter.size - 2) usedBanter.clear()
         val (x, y) = FunTalk.banter[i]
-        say(a, x); delay(2300); say(b, y)
+        say(a, x, minor = true); delay(2300); say(b, y, minor = true)
         life.seats[b]?.let { mood(it.id, Mood.HAPPY, 1800) }
     }
 
@@ -285,7 +291,46 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     private fun newGame() = BlackjackGame(settings.rules, bankroll0(), botCount = 0, unit = settings.tableMin)
     private fun bankroll0() = try { store.bankroll } catch (e: Exception) { CasualStore.START }
 
-    private fun say(where: Int, text: String, asName: String? = null) {
+    /** A random seated player (not [except]) says something for [talk], with [pct] percent chance. */
+    private fun playerSay(talk: Talk, pct: Int, except: Int = -1): Int? {
+        if (rnd.nextInt(100) >= pct) return null
+        val seats = life.seats.indices.filter { life.seats[it] != null && it != except }
+        if (seats.isEmpty()) return null
+        val i = seats[rnd.nextInt(seats.size)]
+        val line = TableTalk.say(life.seats[i]!!.who.archetype, talk, rnd) ?: return null
+        say(i, line)
+        return i
+    }
+
+    private suspend fun doPeek() {
+        say(DEALER, MoreTalk.dealerSays(dealer.name, "peek", rnd))
+        peeking = true
+        if (!instant) delay(1300)
+        peeking = false
+    }
+
+    private suspend fun peekNoBlackjack() {
+        if (!peekPending) return
+        peekPending = false
+        doPeek()
+        say(DEALER, MoreTalk.dealerSays(dealer.name, "nobj", rnd))
+        if (!instant) delay(500)
+    }
+
+    /** First deal of a shoe or after a shuffle: the player cuts, the dealer burns a card. */
+    private suspend fun shoeProcedure() {
+        if (rnd.nextInt(100) < 70) say(DEALER, MoreTalk.dealerSays(dealer.name, "cut", rnd))
+        proc = 1; fx(Fx.DEAL)
+        if (!instant) delay(900)
+        proc = 2
+        if (rnd.nextInt(100) < 50) say(DEALER, MoreTalk.dealerSays(dealer.name, "burn", rnd))
+        if (!instant) delay(750)
+        proc = 0
+    }
+
+    private fun upValue(): Int = gs.dealerCards.firstOrNull()?.let { handTotal(listOf(it)).first } ?: 0
+
+    private fun say(where: Int, text: String, asName: String? = null, minor: Boolean = false) {
         if (!settings.tableTalk && where != DEALER && where != PIT) return
         // At most two players talk at once so bubbles stay readable.
         if (where >= 0) {
@@ -296,9 +341,9 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         val key = bubbles[where]!!.key
         if (!instant) viewModelScope.launch { delay(2600 + text.length * 35L); if (bubbles[where]?.key == key) bubbles.remove(where) }
         val who = asName ?: when (where) { DEALER -> dealer.name; PIT -> "Pit boss"; else -> (seatView.getOrNull(where) ?: life.seats.getOrNull(where))?.who?.name ?: "" }
-        val line = ChatLine(key, where, who, text)
+        val line = ChatLine(key, where, who, text, minor)
         chat.add(line)
-        while (chat.size > 4) chat.removeAt(0)
+        while (chat.size > 6) chat.removeAt(0)
         if (!instant) viewModelScope.launch { delay(5200 + text.length * 60L); chat.remove(line) }
     }
 
@@ -382,12 +427,15 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             if (roundOver && dealtOnce && !instant && gs.dealerCards.isNotEmpty()) { sweeping = true; fx(Fx.DEAL); delay(520) }
             clearTableForBet(); tpResult = null; tpNet = 0; payouts.clear()
             life.planBets(game.upcomingTrueCount())
+            peekPending = false
             if (life.shuffleUpNow) {
                 life.shuffleUpNow = false
                 game.shoe.shuffle()
                 say(DEALER, "Shuffle up.")
                 shuffleAnim()
-            }
+                playerSay(Talk.SHUFFLE, 40)
+                shoeProcedure()
+            } else if (!dealtOnce) shoeProcedure()
             val playing = life.playing()
             roundSeats = playing.map { it to life.seats[it]!!.id }
             game.changeSeats(playing.size)
@@ -418,7 +466,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             shown = gs.roundStartSeq
             sweeping = false
             store.bankroll = game.state().bankroll
+            val up = upValue()
+            peekPending = up >= 10
+            if (up in 4..6) playerSay(Talk.DEALER_WEAK, 35) else if (up >= 10) playerSay(Talk.DEALER_STRONG, 35)
             reveal()
+            if (gs.phase != Phase.INSURANCE) peekNoBlackjack()
             after()
         }
     }
@@ -432,6 +484,10 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         game.act(a)
         gs = game.state()
         if (gs.phase != Phase.ROUND_OVER) bankroll = gs.bankroll
+        actions[YOU] = when (a) { Action.HIT -> "Hit"; Action.STAND -> "Stand"; Action.DOUBLE -> "Double"; Action.SPLIT -> "Split"; else -> "Surrender" }
+        if (!instant) viewModelScope.launch { delay(1600); actions.remove(YOU) }
+        if (a == Action.DOUBLE && rnd.nextInt(100) < 40) say(DEALER, MoreTalk.dealerSays(dealer.name, "double", rnd))
+        if (a == Action.SPLIT && rnd.nextInt(100) < 40) say(DEALER, MoreTalk.dealerSays(dealer.name, "split", rnd))
         viewModelScope.launch { reveal(); after() }
     }
 
@@ -440,7 +496,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         busy = true
         game.insurance(take)
         gs = game.state()
-        viewModelScope.launch { reveal(); after() }
+        viewModelScope.launch { reveal(); peekNoBlackjack(); after() }
     }
 
     fun showHint() {
@@ -461,12 +517,15 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             val s = shown
             val flip = gs.events.firstOrNull { it.seq == s }?.kind == EventKind.FLIP
             val owner = ownerOf(s)
+            if (peekPending && s == gs.holeRevealSeq) { peekPending = false; doPeek() }
             // Another player taking a hit: a short think, and the action shows over them.
             if (owner in 0 until 4 && s >= gs.roundStartSeq + 2 * (gs.bots.size + 1) + 2) {
                 val b = roundSeats.indexOfFirst { it.first == owner }
                 val hand = gs.bots.getOrNull(b)
-                actions[owner] = if (hand != null && hand.doubled && hand.seqs.lastOrNull() == s) "Double" else "Hit"
-                if (!instant) { delay(600); viewModelScope.launch { delay(1200); actions.remove(owner) } }
+                val doubling = hand != null && hand.doubled && hand.seqs.lastOrNull() == s
+                actions[owner] = if (doubling) "Double" else "Hit"
+                if (doubling && rnd.nextInt(100) < 50) life.seats.getOrNull(owner)?.let { st -> TableTalk.say(st.who.archetype, Talk.DOUBLE, rnd)?.let { say(owner, it) } }
+                if (!instant) { delay(thinkMs(life.seats.getOrNull(owner)?.who?.archetype)); viewModelScope.launch { delay(1200); actions.remove(owner) } }
             }
             reach = Reach(owner, k())
             fx(if (flip) Fx.FLIP else Fx.DEAL)
@@ -482,6 +541,13 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (instant) actions.clear()
     }
 
+    /** How long each kind of player takes over a decision. */
+    private fun thinkMs(a: Archetype?): Long = when (a) {
+        Archetype.PRO -> 350L; Archetype.COUNTER -> 400L; Archetype.HIGH_ROLLER -> 450L; Archetype.TILTER -> 500L
+        Archetype.REGULAR -> 600L; Archetype.PARTY -> 700L; Archetype.HUNCH -> 800L; Archetype.TOURIST -> 900L
+        Archetype.DRUNK -> 1000L; Archetype.CAUTIOUS -> 1200L; Archetype.ROOKIE -> 1300L; null -> 650L
+    }
+
     private fun ownerOf(seq: Int): Int {
         if (seq in gs.dealerSeqs || seq == gs.holeRevealSeq) return DEALER
         gs.hands.forEachIndexed { i, h -> if (seq in h.seqs) return YOU + i }
@@ -491,10 +557,38 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
 
     private fun after() {
         when (gs.phase) {
-            Phase.INSURANCE -> if (!settings.offerInsurance) { busy = false; insurance(false); return } else busy = false
+            Phase.INSURANCE -> if (!settings.offerInsurance) { busy = false; insurance(false); return } else { busy = false; say(DEALER, MoreTalk.dealerSays(dealer.name, "ins", rnd)) }
             Phase.PLAYER -> { busy = false; bankroll = gs.bankroll }
             Phase.ROUND_OVER -> finishRound()
             Phase.BETTING -> busy = false
+        }
+    }
+
+    /** One extra moment per round at most: a reaction to your bust or loss, a tip for the dealer, or a lapse in manners. */
+    private fun roundExtrasTalk(net: Int, youBust: Boolean, nets: Map<Int, Int>) {
+        val min = settings.tableMin
+        when {
+            youBust && playerSay(Talk.YOU_BUST, 35) != null -> {}
+            net <= -min * 10 && playerSay(Talk.YOU_LOSE_BIG, 30) != null -> {}
+            else -> {
+                val tipper = nets.entries.firstOrNull { (seat, n) -> n >= min * 6 && life.seats.getOrNull(seat)?.who?.archetype in MoreTalk.tippers && rnd.nextInt(100) < 30 }
+                if (tipper != null) {
+                    val st = life.seats[tipper.key] ?: return
+                    TableTalk.say(st.who.archetype, Talk.TIP, rnd)?.let { say(tipper.key, it) }
+                    viewModelScope.launch {
+                        if (!instant) delay(1500)
+                        say(DEALER, MoreTalk.dealerSays(dealer.name, "thanks", rnd))
+                        fx(Fx.CHIP)
+                    }
+                } else if (rnd.nextInt(100) < 7) {
+                    val off = life.seats.indices.filter { life.seats[it]?.who?.archetype in MoreTalk.forgetful }.randomOrNull(rnd) ?: return
+                    say(DEALER, MoreTalk.dealerSays(dealer.name, "etiquette", rnd))
+                    viewModelScope.launch {
+                        if (!instant) delay(1700)
+                        TableTalk.say(life.seats[off]?.who?.archetype ?: return@launch, Talk.ETIQUETTE_REPLY, rnd)?.let { say(off, it) }
+                    }
+                }
+            }
         }
     }
 
@@ -566,6 +660,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (net >= settings.tableMin * 10 && !bj) life.seats.indices.firstOrNull { life.seats[it] != null && rnd.nextInt(100) < 40 }?.let { i ->
             TableTalk.say(life.seats[i]!!.who.archetype, Talk.YOU_BIG_WIN, rnd)?.let { say(i, it) }
         }
+        roundExtrasTalk(net, g.results.isNotEmpty() && g.results.all { it.outcome == Outcome.BUST }, nets)
         roundOver = true
         if (bet > bankroll) bet = (bankroll / settings.tableMin * settings.tableMin).coerceAtLeast(0)
         if (ppBet + bet > bankroll) ppBet = 0
@@ -592,8 +687,10 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                     if (met >= 3 && rnd.nextInt(100) < 45) { if (!instant) delay(1500); say(e.seat, FunTalk.familiar[rnd.nextInt(FunTalk.familiar.size)]) }
                     if (rnd.nextInt(100) < dealer.talky + 30) {
                         if (!instant) delay(900)
-                        say(DEALER, listOf("Welcome. Changing ${money(e.s.buyIn)}.", "Welcome to the table.", "Good luck, ${e.s.who.name}.")[rnd.nextInt(3)])
+                        say(DEALER, if (rnd.nextBoolean()) MoreTalk.dealerSays(dealer.name, "welcome", rnd) else listOf("Welcome. Changing ${money(e.s.buyIn)}.", "Welcome to the table.", "Good luck, ${e.s.who.name}.")[rnd.nextInt(3)])
                     }
+                    if (!instant) delay(700)
+                    playerSay(Talk.NEW_PLAYER, 35, except = e.seat)
                 }
                 is TableEvent.Leave -> {
                     say(e.seat, e.line)
@@ -666,7 +763,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             if (seated.size >= 2 && rnd.nextInt(100) < 24) { banter(seated); continue }
             if (seated.isNotEmpty() && drinkHands == 0 && rnd.nextInt(100) < 7) { sendDrink(seated[rnd.nextInt(seated.size)]); continue }
             if (rnd.nextInt(100) < dealer.talky) { say(DEALER, TableTalk.dealer(dealer.chatter, rnd)); continue }
-            for (e in life.idleChat()) { say(e.seat, e.line); delay(1600) }
+            for (e in life.idleChat()) { say(e.seat, e.line, minor = true); delay(1600) }
         }
     }
 
@@ -710,7 +807,9 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         life.seats[seat] = Seat(1000L + seat, who, 50 * settings.tableMin, 50 * settings.tableMin, who.baseUnits * settings.tableMin, plan = 99, heat = heat)
         seatView = life.seats.toList()
     }
-    internal fun sayForTest(where: Int, text: String) = say(where, text)
+    internal fun procForTest(stage: Int, peek: Boolean) { proc = stage; peeking = peek }
+    internal fun signalForTest(text: String) { actions[YOU] = text }
+    internal fun sayForTest(where: Int, text: String, minor: Boolean = false) = say(where, text, minor = minor)
     internal fun pitForTest(seat: Int) { pit = PitState(seat, k()) }
     internal fun moodForTest(id: Long, m: Mood) { moods[id] = m }
 

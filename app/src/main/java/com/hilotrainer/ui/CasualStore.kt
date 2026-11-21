@@ -37,6 +37,8 @@ data class CasualSettings(
     val offerInsurance: Boolean = true,
     val sideBets: Boolean = true,
     val tableTalk: Boolean = true,
+    /** 0 lane, 1 bubbles over heads, 2 captions, 3 table log, 4 bubbles and floating small talk. */
+    val chatStyle: Int = 2,
 ) {
     val rules: Rules get() = Rules(decks = decks, dealerHitsSoft17 = dealerHitsSoft17, doubleAfterSplit = doubleAfterSplit, surrenderAllowed = surrender, sixToFive = sixToFive)
     val theme: FeltTheme get() = FeltTheme.entries.getOrElse(felt) { FeltTheme.GREEN }
@@ -95,7 +97,7 @@ class CasualStore(context: Context?) {
             seats = int("s_seats", d.seats).coerceIn(0, 4), comeAndGo = bool("s_cag", d.comeAndGo), startPlayers = int("s_start", d.startPlayers),
             felt = int("s_felt", d.felt), cardBack = int("s_back", d.cardBack), sound = bool("s_sound", d.sound), haptics = bool("s_hap", d.haptics),
             speed = int("s_speed", d.speed), hints = bool("s_hints", d.hints), offerInsurance = bool("s_ins", d.offerInsurance),
-            sideBets = bool("s_side", d.sideBets), tableTalk = bool("s_talk", d.tableTalk),
+            sideBets = bool("s_side", d.sideBets), tableTalk = bool("s_talk", d.tableTalk), chatStyle = int("s_chat", d.chatStyle).coerceIn(0, 4),
         )
     }
 
@@ -105,12 +107,12 @@ class CasualStore(context: Context?) {
             putBoolean("s_das", s.doubleAfterSplit); putInt("s_min", s.tableMin); putInt("s_seats", s.seats); putBoolean("s_cag", s.comeAndGo)
             putInt("s_start", s.startPlayers); putInt("s_felt", s.felt); putInt("s_back", s.cardBack); putBoolean("s_sound", s.sound)
             putBoolean("s_hap", s.haptics); putInt("s_speed", s.speed); putBoolean("s_hints", s.hints); putBoolean("s_ins", s.offerInsurance)
-            putBoolean("s_side", s.sideBets); putBoolean("s_talk", s.tableTalk)
+            putBoolean("s_side", s.sideBets); putBoolean("s_talk", s.tableTalk); putInt("s_chat", s.chatStyle)
         },
         "s_decks" to s.decks, "s_h17" to s.dealerHitsSoft17, "s_65" to s.sixToFive, "s_sur" to s.surrender, "s_das" to s.doubleAfterSplit,
         "s_min" to s.tableMin, "s_seats" to s.seats, "s_cag" to s.comeAndGo, "s_start" to s.startPlayers, "s_felt" to s.felt,
         "s_back" to s.cardBack, "s_sound" to s.sound, "s_hap" to s.haptics, "s_speed" to s.speed, "s_hints" to s.hints,
-        "s_ins" to s.offerInsurance, "s_side" to s.sideBets, "s_talk" to s.tableTalk,
+        "s_ins" to s.offerInsurance, "s_side" to s.sideBets, "s_talk" to s.tableTalk, "s_chat" to s.chatStyle,
     )
 
     fun loadStats(): CasualStats = CasualStats(
