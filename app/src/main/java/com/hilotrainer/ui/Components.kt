@@ -380,7 +380,7 @@ fun PlayingCard(card: CardModel?, width: Dp, faceDown: Boolean = false, modifier
  * and it flips over when [faceUp] changes.
  */
 @Composable
-fun TableCard(card: CardModel, width: Dp, faceUp: Boolean, from: DpOffset, animate: Boolean, durationMs: Int = 320, modifier: Modifier = Modifier) {
+fun TableCard(card: CardModel, width: Dp, faceUp: Boolean, from: DpOffset, animate: Boolean, durationMs: Int = 320, modifier: Modifier = Modifier, restTilt: Float = 0f, lift: Boolean = false) {
     val progress = remember { Animatable(if (animate) 0f else 1f) }
     LaunchedEffect(Unit) {
         if (animate) progress.animateTo(1f, tween(durationMs, easing = FastOutSlowInEasing))
@@ -391,8 +391,13 @@ fun TableCard(card: CardModel, width: Dp, faceUp: Boolean, from: DpOffset, anima
         modifier.graphicsLayer {
             val p = progress.value
             translationX = with(density) { from.x.toPx() } * (1 - p)
-            translationY = with(density) { from.y.toPx() } * (1 - p)
-            rotationZ = -18f * (1 - p)
+            translationY = with(density) { from.y.toPx() } * (1 - p) - (if (lift) kotlin.math.sin(p * 3.14159f) * 10.dp.toPx() else 0f)
+            rotationZ = restTilt - 18f * (1 - p)
+            if (lift) {
+                shadowElevation = (2f + 6f * kotlin.math.sin(p * 3.14159f)) * density.density
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp); clip = false
+                scaleX = 1f + 0.08f * kotlin.math.sin(p * 3.14159f); scaleY = scaleX
+            }
             rotationY = flip
             cameraDistance = 14f * density.density
             alpha = (p * 3f).coerceAtMost(1f)

@@ -16,6 +16,14 @@ import com.hilotrainer.engine.Backoff
 import com.hilotrainer.engine.BlackjackGame
 import com.hilotrainer.engine.BotStyle
 import com.hilotrainer.engine.CasualDealers
+import com.hilotrainer.engine.Comps
+import com.hilotrainer.engine.Dare
+import com.hilotrainer.engine.Dares
+import com.hilotrainer.engine.FunTalk
+import com.hilotrainer.engine.LuckyCards
+import com.hilotrainer.engine.Tier
+import com.hilotrainer.engine.Tiers
+import com.hilotrainer.engine.Wheel
 import com.hilotrainer.engine.DailyBonus
 import com.hilotrainer.engine.DealerCalls
 import com.hilotrainer.engine.EventKind
@@ -55,6 +63,12 @@ data class CasualBanner(val title: String, val amount: Int, val big: Boolean, va
 
 data class PitState(val seat: Int, val key: Long)
 
+/** One line in the table chat. Everyone's talk lands here in order, so nothing is hidden behind anything else. */
+/** A perk or surprise shown as a toast: a comp, an invitation, a rush. */
+data class Perk(val id: Long, val title: String, val desc: String)
+
+data class ChatLine(val key: Long, val who: Int, val name: String, val text: String)
+
 /**
  * Just Play: blackjack for fun. No count, no coaching, no grading. A persistent bankroll,
  * a table of named regulars who come and go, three rotating dealers and a pit boss.
@@ -89,6 +103,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     var dealtOnce by mutableStateOf(false); private set
 
     val bubbles = mutableStateMapOf<Int, Bubble>()
+    /** The last few things said at the table, oldest first. */
+    val chat = mutableStateListOf<ChatLine>()
     val moods = mutableStateMapOf<Long, Mood>()
     var reach by mutableStateOf<Reach?>(null); private set
     var dealerIdx by mutableIntStateOf(rnd.nextInt(CasualDealers.ALL.size)); private set
@@ -104,6 +120,24 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     /** What a player just did at the table, like "Hit" or "Double", for a moment. */
     val actions = mutableStateMapOf<Int, String>()
     var hint by mutableStateOf<String?>(null); private set
+    val perks = mutableStateListOf<Perk>()
+    /** A dare on offer, and whether you took it. */
+    var dare by mutableStateOf<Dare?>(null); private set
+    var dareOn by mutableStateOf(false); private set
+    /** Double Down Rush: hands left where wins pay 50% extra. */
+    var rushLeft by mutableIntStateOf(0); private set
+    private var untilRush = rnd.nextInt(10, 17)
+    /** A free drink on your rail, for a few hands. */
+    var drinkHands by mutableIntStateOf(0); private set
+    var wheelReady by mutableStateOf(false); private set
+    var wheelIdx by mutableStateOf<Int?>(null); private set
+    /** The three lucky cards after claiming the daily bonus, and which one you picked. */
+    var luckyPrizes by mutableStateOf<List<Int>?>(null); private set
+    var luckyPick by mutableStateOf<Int?>(null); private set
+    /** Chips added or taken by rush bonuses, dares and comps in the last round, on top of the hand result. */
+    var roundExtras by mutableIntStateOf(0); private set
+    private val usedBanter = mutableSetOf<Int>()
+    private val notifiedTiers = mutableSetOf<Int>()
     val toasts = mutableStateListOf<Achievement>()
     var stats by mutableStateOf(store.loadStats()); private set
     var earned by mutableStateOf(store.achievements); private set
@@ -113,16 +147,145 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     private var eventsJob: Job? = null
 
     init {
+        life.exclude = Tiers.excluded(Tiers.forMin(settings.tableMin))
         life.setOpenSeats(settings.seats)
         life.fill(settings.startPlayers.coerceAtMost(settings.seats))
+        life.seats.filterNotNull().forEach { store.addMet(it.who.name) }
         seatView = life.seats.toList()
         bet = store.lastBet.takeIf { it in settings.tableMin..bankroll } ?: settings.tableMin.coerceAtMost(bankroll)
+        Tiers.ALL.filter { tierUnlocked(it) }.forEach { notifiedTiers += it.id }
+    }
+
+    // Rooms, perks and surprises
+    fun tierUnlocked(t: Tier) = t.unlockAt <= maxOf(stats.biggestBankroll, bankroll) || t.id.toString() in store.invites || t.min == settings.tableMin
+
+    private fun credit(amount: Int) {
+        bankroll += amount
+        game.resetBankroll(bankroll)
+        store.bankroll = bankroll
+    }
+
+    fun perk(title: String, desc: String) { perks.add(Perk(k(), title, desc)); while (perks.size > 3) perks.removeAt(0) }
+
+    fun acceptDare() {
+        val d = dare ?: return
+        if (!canBet || dareOn || bankroll < bet + d.stake) return
+        dareOn = true
+        say(d.seat, Dares.accepted[rnd.nextInt(Dares.accepted.size)], d.name)
+        fx(Fx.CHIP)
+    }
+    fun declineDare() {
+        val d = dare ?: return
+        if (dareOn) return
+        dare = null
+        say(d.seat, Dares.declined[rnd.nextInt(Dares.declined.size)], d.name)
+    }
+
+    /** Spin the bonus wheel earned by a streak. Returns the segment it lands on. */
+    fun spinWheel(): Int {
+        if (!wheelReady || wheelIdx != null) return -1
+        val i = Wheel.pick(rnd); wheelIdx = i
+        return i
+    }
+    fun collectWheel() {
+        val i = wheelIdx ?: return
+        val amt = Wheel.UNITS[i] * settings.tableMin
+        credit(amt); fx(Fx.WIN)
+        perk("Bonus wheel: +${money(amt)}", "Nice spin.")
+        wheelIdx = null; wheelReady = false
+    }
+    fun pickLucky(i: Int) {
+        val p = luckyPrizes ?: return
+        if (luckyPick != null || i !in p.indices) return
+        luckyPick = i; credit(p[i]); fx(Fx.WIN)
+    }
+    fun closeLucky() { luckyPrizes = null; luckyPick = null }
+    internal fun giveWheelForTest() { wheelReady = true }
+    internal fun rushForTest(n: Int) { rushLeft = n }
+    internal fun drinkForTest(n: Int) { drinkHands = n }
+    internal fun giveDareForTest(seat: Int, stake: Int) { dare = Dare(seat, life.seats[seat]?.who?.name ?: "Someone", stake, "Bet you can't beat the dealer this hand. \$$stake says you can't.") }
+
+    private fun funAfterRound(handNet: Int, net: Int, wins: Int) {
+        roundExtras = 0
+        fun extra(n: Int) { credit(n); roundExtras += n }
+        if (drinkHands > 0) drinkHands--
+        // Double Down Rush: a few hands where winning pays extra.
+        if (rushLeft > 0) {
+            if (net > 0 && net / 2 > 0) { extra(net / 2); perk("Rush bonus +${money(net / 2)}", "Wins pay 50% extra during the rush.") }
+            rushLeft--
+            if (rushLeft == 0) say(DEALER, "That's the end of the rush.")
+        } else if (--untilRush <= 0) {
+            rushLeft = 3; untilRush = rnd.nextInt(14, 23)
+            perk("Double Down Rush!", "The next 3 hands pay 50% extra on wins.")
+            say(DEALER, "Double Down Rush is on! Wins pay extra for three hands.")
+        }
+        // A friendly dare, settled on this hand.
+        val d = if (dareOn) dare else null
+        if (d != null) {
+            dare = null; dareOn = false
+            val tag = money(d.stake)
+            when {
+                handNet > 0 -> { extra(d.stake); say(d.seat, Dares.won[rnd.nextInt(Dares.won.size)].replace("\$STAKE", tag), d.name) }
+                handNet < 0 -> { extra(-minOf(d.stake, bankroll)); say(d.seat, Dares.lost[rnd.nextInt(Dares.lost.size)].replace("\$STAKE", tag), d.name) }
+                else -> say(d.seat, "A push. Nobody pays.", d.name)
+            }
+        }
+        // Comps for rated play.
+        val every = maxOf(500, settings.tableMin * 40)
+        if (stats.wagered - store.compMark >= every) {
+            store.compMark = stats.wagered
+            val c = Comps.roll(rnd)
+            if (c.drink) { drinkHands = 4; say(DEALER, "A drink for you, compliments of the house.") } else extra(c.units * settings.tableMin)
+            perk(c.title + (if (c.units > 0) " +${money(c.units * settings.tableMin)}" else ""), c.desc)
+        }
+        // New rooms: unlocked by bankroll, or by an invitation from the pit boss.
+        Tiers.ALL.filter { it.id !in notifiedTiers && tierUnlocked(it) }.forEach { notifiedTiers += it.id; perk("Unlocked: ${it.name}", "Open the Table menu to move rooms.") }
+        val locked = Tiers.ALL.firstOrNull { !tierUnlocked(it) }
+        if (locked != null && net >= settings.tableMin * 8 && maxOf(stats.biggestBankroll, bankroll) >= locked.unlockAt / 2 && rnd.nextInt(100) < 45) {
+            store.invites = store.invites + locked.id.toString()
+            notifiedTiers += locked.id
+            perk("Invitation: ${locked.name}", "The pit boss invited you to play there. Open the Table menu.")
+            say(PIT, "You've been playing well. There's a seat for you in the ${locked.name} whenever you want it.")
+        }
+        // Three wins in a row earns a spin.
+        if (wins > 0 && net > 0 && stats.winStreak > 0 && stats.winStreak % 3 == 0 && !wheelReady) {
+            wheelReady = true
+            perk("Bonus wheel!", "${stats.winStreak} wins in a row. Tap Spin the wheel.")
+        }
+        // Someone dares you between hands, now and then.
+        if (dare == null && settings.tableTalk && bankroll >= settings.tableMin * 10 && rnd.nextInt(100) < 12) {
+            val seated = life.seats.indices.filter { life.seats[it] != null }
+            if (seated.isNotEmpty()) {
+                val i = seated[rnd.nextInt(seated.size)]
+                val dd = Dares.make(i, life.seats[i]!!.who.name, settings.tableMin, rnd)
+                dare = dd; say(i, dd.line, dd.name)
+            }
+        }
+    }
+
+    private suspend fun banter(seated: List<Int>) {
+        val a = seated[rnd.nextInt(seated.size)]
+        val b = seated.filter { it != a }.let { it[rnd.nextInt(it.size)] }
+        var i = rnd.nextInt(FunTalk.banter.size); var tries = 0
+        while (i in usedBanter && tries++ < 30) i = rnd.nextInt(FunTalk.banter.size)
+        usedBanter += i; if (usedBanter.size >= FunTalk.banter.size - 2) usedBanter.clear()
+        val (x, y) = FunTalk.banter[i]
+        say(a, x); delay(2300); say(b, y)
+        life.seats[b]?.let { mood(it.id, Mood.HAPPY, 1800) }
+    }
+
+    private suspend fun sendDrink(i: Int) {
+        val s = life.seats[i] ?: return
+        say(i, FunTalk.drinkSend[rnd.nextInt(FunTalk.drinkSend.size)]); delay(1900)
+        drinkHands = 4; fx(Fx.CHIP)
+        perk("Drink from ${s.who.name}", "Cheers!")
+        mood(s.id, Mood.HAPPY, 1800)
     }
 
     private fun newGame() = BlackjackGame(settings.rules, bankroll0(), botCount = 0, unit = settings.tableMin)
     private fun bankroll0() = try { store.bankroll } catch (e: Exception) { CasualStore.START }
 
-    private fun say(where: Int, text: String) {
+    private fun say(where: Int, text: String, asName: String? = null) {
         if (!settings.tableTalk && where != DEALER && where != PIT) return
         // At most two players talk at once so bubbles stay readable.
         if (where >= 0) {
@@ -132,6 +295,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         bubbles[where] = Bubble(text, k())
         val key = bubbles[where]!!.key
         if (!instant) viewModelScope.launch { delay(2600 + text.length * 35L); if (bubbles[where]?.key == key) bubbles.remove(where) }
+        val who = asName ?: when (where) { DEALER -> dealer.name; PIT -> "Pit boss"; else -> (seatView.getOrNull(where) ?: life.seats.getOrNull(where))?.who?.name ?: "" }
+        val line = ChatLine(key, where, who, text)
+        chat.add(line)
+        while (chat.size > 4) chat.removeAt(0)
+        if (!instant) viewModelScope.launch { delay(5200 + text.length * 60L); chat.remove(line) }
     }
 
     private fun mood(id: Long, m: Mood, ms: Long = 2400) {
@@ -197,6 +365,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         store.bonusDay = today; store.bonusStreak = streak
         bankroll += amt; game.resetBankroll(bankroll); store.bankroll = bankroll
         fx(Fx.WIN)
+        luckyPrizes = LuckyCards.deal(rnd); luckyPick = null
         return amt
     }
 
@@ -204,6 +373,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     fun deal() {
         if (!canBet || bet < settings.tableMin || bet > bankroll) return
         eventsJob?.cancel(); syncSeats()
+        if (!dareOn) dare = null
         busy = true; hint = null
         store.lastBet = bet
         if (game.state().bankroll != bankroll) game.resetBankroll(bankroll)
@@ -355,6 +525,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         val newOnes = Achievements.check(earned, stats, summary)
         if (newOnes.isNotEmpty()) { earned = earned + newOnes.map { it.id }; store.achievements = earned; toasts.addAll(newOnes) }
 
+        funAfterRound(handNet, net, wins)
+
         val first = g.results.firstOrNull()
         val title = when {
             g.results.size > 1 -> listOfNotNull(
@@ -416,6 +588,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                     seatView = seatView.toMutableList().also { it[e.seat] = e.s }
                     if (!instant) delay(500)
                     say(e.seat, e.line)
+                    val met = store.met(e.s.who.name); store.addMet(e.s.who.name)
+                    if (met >= 3 && rnd.nextInt(100) < 45) { if (!instant) delay(1500); say(e.seat, FunTalk.familiar[rnd.nextInt(FunTalk.familiar.size)]) }
                     if (rnd.nextInt(100) < dealer.talky + 30) {
                         if (!instant) delay(900)
                         say(DEALER, listOf("Welcome. Changing ${money(e.s.buyIn)}.", "Welcome to the table.", "Good luck, ${e.s.who.name}.")[rnd.nextInt(3)])
@@ -488,6 +662,9 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         while (true) {
             delay(7000L + rnd.nextLong(0, 9000))
             if (busy || !settings.tableTalk || eventsJob?.isActive == true) continue
+            val seated = life.seats.indices.filter { life.seats[it] != null }
+            if (seated.size >= 2 && rnd.nextInt(100) < 24) { banter(seated); continue }
+            if (seated.isNotEmpty() && drinkHands == 0 && rnd.nextInt(100) < 7) { sendDrink(seated[rnd.nextInt(seated.size)]); continue }
             if (rnd.nextInt(100) < dealer.talky) { say(DEALER, TableTalk.dealer(dealer.chatter, rnd)); continue }
             for (e in life.idleChat()) { say(e.seat, e.line); delay(1600) }
         }
@@ -507,6 +684,16 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             gs = game.state(); shown = 0; roundSeats = emptyList(); roundOver = false; banner = null
             life.unit = n.tableMin; life.clearPitBoss(); pit = null
             if (n.tableMin != old.tableMin) { bet = n.tableMin.coerceAtMost(bankroll); ppBet = 0; tpBet = 0 }
+            if (n.tableMin != old.tableMin) {
+                val t = Tiers.forMin(n.tableMin)
+                life.exclude = Tiers.excluded(t)
+                for (i in life.seats.indices) life.seats[i] = null
+                life.fill(n.startPlayers.coerceAtMost(n.seats))
+                seatView = life.seats.toList(); departing.clear(); chat.clear()
+                life.seats.filterNotNull().forEach { store.addMet(it.who.name) }
+                dare = null; dareOn = false
+                say(DEALER, "Welcome to the ${t.name}.")
+            }
             say(DEALER, "New shoe. ${if (n.dealerHitsSoft17) "Dealer hits soft 17." else "Dealer stands on all 17s."}")
         }
         life.comeAndGo = n.comeAndGo

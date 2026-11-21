@@ -49,7 +49,7 @@ class JustPlayUiTest {
             assertEquals(Phase.ROUND_OVER, v.gs.phase)
             assertTrue(v.roundOver)
             val net = v.banner!!.amount
-            assertEquals("round $it", before + net, v.bankroll)
+            assertEquals("round $it", before + net + v.roundExtras, v.bankroll)
             assertEquals(v.bankroll, v.store.bankroll)
         }
         assertTrue(v.stats.hands >= 400)
@@ -73,6 +73,74 @@ class JustPlayUiTest {
         assertEquals(0, v.claimBonus(today = 500))
         assertEquals(300, v.claimBonus(today = 501))
         assertEquals(start + 550, v.bankroll)
+    }
+
+    @Test fun roomsUnlockByBankrollOrInvite() {
+        val v = casualVm(5)
+        val silver = com.hilotrainer.engine.Tiers.ALL[2]
+        assertTrue(!v.tierUnlocked(silver))
+        v.store.invites = v.store.invites + silver.id.toString()
+        assertTrue(v.tierUnlocked(silver))
+        v.update(v.settings.copy(tableMin = 25))
+        assertEquals(25, v.settings.tableMin)
+        assertTrue(v.seatView.any { it != null })
+        assertTrue(v.seatView.filterNotNull().none { it.who.archetype == com.hilotrainer.engine.Archetype.TOURIST || it.who.archetype == com.hilotrainer.engine.Archetype.ROOKIE })
+    }
+
+    @Test fun wheelAndLuckyCardsPayOut() {
+        val v = casualVm(6)
+        v.giveWheelForTest()
+        val before = v.bankroll
+        val i = v.spinWheel()
+        assertTrue(i in 0..7)
+        v.collectWheel()
+        assertEquals(before + com.hilotrainer.engine.Wheel.UNITS[i] * v.settings.tableMin, v.bankroll)
+        assertTrue(!v.wheelReady)
+        val b2 = v.bankroll
+        v.claimBonus(1000)
+        val prizes = v.luckyPrizes!!
+        assertEquals(listOf(25, 50, 150), prizes.sorted())
+        val b3 = v.bankroll
+        v.pickLucky(1)
+        assertEquals(b3 + prizes[1], v.bankroll)
+        v.pickLucky(0)
+        assertEquals(b3 + prizes[1], v.bankroll)
+        assertTrue(b3 > b2)
+    }
+
+    @Test fun dareSettlesOnTheHand() {
+        repeat(6) { seed ->
+            val v = casualVm(40 + seed)
+            v.seatForTest(1, "Hank")
+            v.giveDareForTest(1, 30)
+            v.acceptDare()
+            assertTrue(v.dareOn)
+            val before = v.bankroll
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            while (v.gs.phase == Phase.PLAYER) v.act(v.gs.basicAdvice!!.action)
+            assertTrue(!v.dareOn && v.dare == null)
+            assertTrue(v.bankroll >= 0)
+            assertEquals(v.bankroll, v.store.bankroll)
+            val net = v.gs.results.sumOf { it.net }
+            val delta = v.bankroll - before
+            assertEquals("net $net delta $delta", net + v.roundExtras, delta)
+            assertTrue(v.roundExtras == 30 || v.roundExtras == -30 || net == 0 || v.roundExtras >= -30)
+        }
+    }
+
+    @Test fun rushAndCompsKeepTheLedgerHonest() {
+        val v = casualVm(77)
+        var rush = false
+        repeat(120) { playOne(v); if (v.rushLeft > 0) rush = true; assertEquals(v.bankroll, v.store.bankroll); assertTrue(v.bankroll >= 0) }
+        assertTrue("a rush should start within 120 hands", rush)
+    }
+
+    @Test fun funLinesHaveNoDashes() {
+        val all = com.hilotrainer.engine.FunTalk.familiar + com.hilotrainer.engine.FunTalk.drinkSend + com.hilotrainer.engine.FunTalk.drinkThanks +
+            com.hilotrainer.engine.FunTalk.banter.flatMap { listOf(it.first, it.second) } + com.hilotrainer.engine.Dares.accepted + com.hilotrainer.engine.Dares.declined +
+            com.hilotrainer.engine.Dares.won + com.hilotrainer.engine.Dares.lost + com.hilotrainer.engine.Tiers.ALL.map { it.blurb + it.name }
+        all.forEach { assertTrue(it, !it.contains('\u2014') && !it.contains('\u2013') && !it.contains(" - ")) }
     }
 
     @Test fun rulesChangeBetweenHands() {
@@ -171,6 +239,9 @@ abstract class JustPlayShotBase {
     @Test fun menuStats() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-stats") { CasualMenu(v, 3, {}) {} } }
     @Test fun menuAwards() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-awards") { CasualMenu(v, 4, {}) {} } }
     @Test fun menuLook() { val v = table(); shoot("jp-look") { CasualMenu(v, 1, {}) {} } }
+    @Test fun dare() { val v = table(); v.rushForTest(2); v.drinkForTest(3); v.giveWheelForTest(); v.giveDareForTest(1, 30); v.sayForTest(1, "Bet you can't beat the dealer this hand. $30 says you can't."); v.sayForTest(CasualViewModel.DEALER, "Bets down, please."); shoot("jp-dare") { JustPlayScreen(v) {} } }
+    @Test fun wheel() { val v = table(); v.giveWheelForTest(); shoot("jp-wheel") { WheelDialog(v) {} } }
+    @Test fun lucky() { val v = table(); v.claimBonus(1000); v.pickLucky(1); shoot("jp-lucky") { LuckyDialog(v) } }
     @Test fun faces() {
         val looks = com.hilotrainer.engine.Cast.ALL.map { it.name to it.look } + com.hilotrainer.engine.CasualDealers.ALL.map { it.name to it.look }
         shoot("jp-faces") {

@@ -89,6 +89,7 @@ private val CasualChips = listOf(
 )
 
 fun chipButtons(min: Int): List<Int> = when {
+    min >= 500 -> listOf(500, 1000, 5000)
     min >= 100 -> listOf(100, 500, 1000, 5000)
     min >= 25 -> listOf(25, 100, 500, 1000)
     min >= 10 -> listOf(10, 25, 100, 500)
@@ -127,6 +128,7 @@ private fun money0(n: Int) = if (n < 0) "-" + money(-n) else money(n)
 @Composable
 fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
     var menu by remember { mutableStateOf<Int?>(null) }
+    var wheelOpen by remember { mutableStateOf(false) }
     BackHandler(enabled = menu != null) { menu = null }
     LaunchedEffect(vm) { vm.chatterLoop() }
     val s = vm.settings
@@ -134,12 +136,15 @@ fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().background(Ink)) {
             TopBar(vm, onBack) { menu = it }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().themedFelt(s.theme)) {
-                TableArea(vm, maxWidth, maxHeight)
+                TableArea(vm, maxWidth, maxHeight) { wheelOpen = true }
             }
             Controls(vm)
         }
         if (menu != null) CasualMenu(vm, menu!!, onTab = { menu = it }) { menu = null }
+        if (wheelOpen && (vm.wheelReady || vm.wheelIdx != null)) WheelDialog(vm) { wheelOpen = false }
+        LuckyDialog(vm)
         Toasts(vm)
+        PerkToasts(vm)
     }
 }
 
@@ -171,7 +176,7 @@ private val SeatX = listOf(0.1f, 0.265f, 0.735f, 0.9f)
 private const val SEATS = 4
 
 @Composable
-private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
+private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp, onWheel: () -> Unit) {
     val gs = vm.gs
     val scale = minOf(w.value / 411f, h.value / 620f).coerceIn(0.78f, 1.9f)
     val dz = h * 0.19f
@@ -204,7 +209,7 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
             (if (vm.settings.dealerHitsSoft17) "Dealer hits soft 17" else "Dealer must stand on all 17s") + "  ·  Insurance pays 2 to 1",
             fontSize = (10 * scale).sp, color = theme.print.copy(alpha = 0.45f), letterSpacing = 1.sp,
         )
-        Text("${money(vm.settings.tableMin)} to ${money(vm.maxBet)}", fontSize = (10 * scale).sp, color = theme.print.copy(alpha = 0.4f))
+        Text("${com.hilotrainer.engine.Tiers.forMin(vm.settings.tableMin).name.uppercase()}  ·  ${money(vm.settings.tableMin)} to ${money(vm.maxBet)}", fontSize = (10 * scale).sp, color = theme.print.copy(alpha = 0.4f))
     }
     Canvas(Modifier.fillMaxSize()) {
         // The curve the seats follow, drawn through the foot of every seat and under your cards.
@@ -240,7 +245,7 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
             key(seq) {
                 val faceUp = i != 1 || (gs.holeRevealed && gs.holeRevealSeq < vm.shown)
                 val x = x0 + step * i
-                TableCard(c, dCard, faceUp, DpOffset(shoe.x - x, shoe.y - dCardsY), animate = !vm.instant, durationMs = pitchMs, modifier = Modifier.offset(x, dCardsY))
+                TableCard(c, dCard, faceUp, DpOffset(shoe.x - x, shoe.y - dCardsY), animate = !vm.instant, durationMs = pitchMs, modifier = Modifier.offset(x, dCardsY), restTilt = ((seq * 29) % 5 - 2) * 0.8f, lift = true)
             }
         }
         val visible = dealerCards.mapIndexedNotNull { i, (c, _) -> if (i != 1 || (gs.holeRevealed && gs.holeRevealSeq < vm.shown)) c else null }
@@ -270,23 +275,96 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
         else DpOffset(seatXdp(seat) - 10.dp, seatYdp(seat) + sCard * 1.4f + 11.dp)
     }
 
-    // Speech bubbles on top of everything.
-    vm.bubbles[CasualViewModel.DEALER]?.let { b ->
-        val bw = minOf(220.dp, w * 0.48f)
-        key(b.key) { SpeechBubble(b.text, Modifier.offset((w / 2 + dealerSize * 0.3f).coerceAtMost(w - bw - 4.dp), 4.dp).width(bw)) }
+    // Everything people say, in order, in one lane that nothing else draws over.
+    run {
+        val top = dz + dCard * 1.4f + 14.dp + 50.dp
+        val bottom = seatYdp(0) - 6.dp
+        val fh = (bottom - top).coerceIn(60.dp, 132.dp)
+        ChatFeed(vm, Modifier.offset(w * 0.04f, top).width(w * 0.92f).height(fh))
     }
-    vm.bubbles[CasualViewModel.PIT]?.let { b ->
-        val px = pitX(vm.pit?.seat ?: 2, w, seatXdp)
-        val bw = minOf(160.dp, w * 0.4f)
-        key(b.key) { SpeechBubble(b.text, Modifier.offset(if (px < w / 2) 4.dp else w - bw - 4.dp, dCardsY + dCard * 1.4f + 4.dp).width(bw), dark = true) }
-    }
-    for (i in 0 until SEATS) vm.bubbles[i]?.let { b ->
-        val bw = minOf(150.dp, w * 0.4f)
-        val bx = (seatXdp(i) - bw / 2).coerceIn(4.dp, w - bw - 4.dp)
-        key(b.key) { SpeechBubble(b.text, Modifier.offset(bx, seatYdp(i) - 30.dp - (if (i == 1 || i == 2) 34.dp else 0.dp)).width(bw)) }
-    }
+    FunBadges(vm, onWheel, Modifier.offset(6.dp, 4.dp))
     // How your round went, over the felt printing.
-    vm.banner?.let { b -> key(b.key) { ResultBanner(b, Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 8.dp)) } }
+    vm.banner?.let { b -> key(b.key) { ResultBanner(b, Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 6.dp)) } }
+}
+
+
+private val SeatColors = listOf(Color(0xFFFFB74D), Color(0xFF81D4FA), Color(0xFFA5D6A7), Color(0xFFF48FB1))
+private fun speakerColor(who: Int): Color = when {
+    who == CasualViewModel.DEALER -> Gold
+    who == CasualViewModel.PIT -> Color(0xFFFF8A80)
+    else -> SeatColors[who.coerceIn(0, 3)]
+}
+
+/** The table chat: the newest line at the bottom, older ones fading above it. */
+@Composable
+private fun ChatFeed(vm: CasualViewModel, modifier: Modifier) {
+    Column(modifier.clip(androidx.compose.ui.graphics.RectangleShape), verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom), horizontalAlignment = Alignment.CenterHorizontally) {
+        val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
+        val lines = vm.chat.toList().let { if (dareShown) it.takeLast(2) else it }
+        lines.forEachIndexed { i, l -> key(l.key) { ChatRow(l, lines.size - 1 - i) } }
+        if (dareShown) DareRow(vm, Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun ChatRow(l: ChatLine, age: Int) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, tween(240, easing = FastOutSlowInEasing)) }
+    val dim = when (age) { 0 -> 1f; 1 -> 0.88f; else -> 0.7f }
+    val dark = l.who == CasualViewModel.PIT
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        pushStyle(androidx.compose.ui.text.SpanStyle(color = speakerColor(l.who), fontWeight = FontWeight.Black)); append(l.name.ifEmpty { "Someone" }); pop()
+        append("  "); append(l.text)
+    }
+    Text(
+        text, fontSize = 12.sp, lineHeight = 15.sp, color = Cream, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.graphicsLayer { alpha = a.value * dim; translationY = (1f - a.value) * 12.dp.toPx() }
+            .clip(RoundedCornerShape(14.dp)).background(if (dark) Color(0xF01B1B1F) else Color(0xE60B2417))
+            .border(1.dp, speakerColor(l.who).copy(alpha = 0.55f), RoundedCornerShape(14.dp)).padding(horizontal = 10.dp, vertical = 3.dp),
+    )
+}
+
+// Where people look. Positions are fractions of the table: the dealer at the top, you at the bottom.
+private fun dirTo(fx: Float, fy: Float, tx: Float, ty: Float) = Offset(((tx - fx) * 2.4f).coerceIn(-1f, 1f), ((ty - fy) * 2.4f).coerceIn(-1f, 1f))
+
+/** A slowly changing number that decides which thing someone glances at next. */
+@Composable
+private fun rememberGlance(seed: Long): Int {
+    var g by remember(seed) { mutableStateOf((seed % 6).toInt().let { if (it < 0) -it else it }) }
+    if (CasualAnim.live) LaunchedEffect(seed) {
+        val r = kotlin.random.Random(seed)
+        while (true) { kotlinx.coroutines.delay(1300L + r.nextLong(0, 2900)); g = r.nextInt(6) }
+    }
+    return g
+}
+
+private fun seatGaze(vm: CasualViewModel, i: Int, g: Int, hasHand: Boolean, talking: Boolean, mood: Mood?): Offset {
+    val mx = SeatX[i]; val my = 0.72f
+    val dealer = dirTo(mx, my, 0.5f, 0.05f); val you = dirTo(mx, my, 0.5f, 0.95f); val cards = Offset(0f, 0.9f)
+    fun seat(j: Int) = dirTo(mx, my, SeatX[j.coerceIn(0, 3)], 0.72f)
+    val near = if (i == 0) 1 else if (i == 3) 2 else if (g % 2 == 0) i - 1 else i + 1
+    val far = if (i < 2) 3 else 0
+    val r = vm.reach
+    return when {
+        mood == Mood.SAD || mood == Mood.ANGRY -> cards
+        mood == Mood.CHEER || mood == Mood.HAPPY -> if (g % 2 == 0) dealer else you
+        talking -> if (g % 3 == 0) dealer else you
+        r != null && g < 4 -> when { r.target == CasualViewModel.DEALER -> dealer; r.target >= CasualViewModel.YOU -> you; r.target == i -> cards; else -> seat(r.target) }
+        hasHand && g < 2 -> cards
+        else -> when (g) { 0 -> cards; 1 -> dealer; 2 -> you; 3 -> seat(near); 4 -> seat(far); else -> dealer }
+    }
+}
+
+private fun dealerGaze(vm: CasualViewModel, g: Int): Offset {
+    val r = vm.reach
+    val from = 0.1f
+    return when {
+        r != null -> when { r.target == CasualViewModel.DEALER -> Offset(0f, 0.9f); r.target >= CasualViewModel.YOU -> Offset(0f, 0.8f); else -> dirTo(0.5f, from, SeatX[r.target.coerceIn(0, 3)], 0.72f) }
+        g < 3 -> Offset(0f, 0.8f)
+        g == 3 -> dirTo(0.5f, from, SeatX[1], 0.72f)
+        g == 4 -> dirTo(0.5f, from, SeatX[2], 0.72f)
+        else -> dirTo(0.5f, from, SeatX[if (g % 2 == 0) 0 else 3], 0.72f)
+    }
 }
 
 private fun pitX(seat: Int, w: Dp, seatX: (Int) -> Dp): Dp =
@@ -316,7 +394,8 @@ private fun DealerZone(vm: CasualViewModel, w: Dp, dz: Dp, size: Dp, seatX: (Int
     ) { CardBack(22.dp, Modifier.align(Alignment.CenterStart).offset(x = 4.dp).graphicsLayer { rotationZ = -8f }) }
     val walking = slide.value != 0f
     Box(Modifier.offset(w / 2 - size / 2, 0.dp).graphicsLayer { translationX = slide.value * w.value * density.density * 0.7f }) {
-        Avatar(dealer.look, size, mood = if (shownIdx == vm.dealerIdx) vm.dealerMood else Mood.NEUTRAL, talking = vm.bubbles.containsKey(CasualViewModel.DEALER), phase = 0.3f, walking = walking, dealer = true, name = "Dealer ${dealer.name}")
+        val dg = dealerGaze(vm, rememberGlance(901L + shownIdx))
+        Avatar(dealer.look, size, mood = if (shownIdx == vm.dealerIdx) vm.dealerMood else Mood.NEUTRAL, talking = vm.bubbles.containsKey(CasualViewModel.DEALER), phase = 0.3f, walking = walking, dealer = true, name = "Dealer ${dealer.name}", gazeX = dg.x, gazeY = dg.y)
         Text(dealer.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, modifier = Modifier.align(Alignment.TopStart).offset(x = size * 0.02f, y = size * 0.12f).background(Gold, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp))
     }
     // The dealing hand stays next to the shoe. To pitch a card it flicks a short way toward the seat, and the
@@ -374,7 +453,9 @@ private fun PitBoss(vm: CasualViewModel, w: Dp, dz: Dp, seatX: (Int) -> Dp) {
     val moving = abs(x - target.value) > 2
     val sz = dz * 0.8f
     Box(Modifier.offset(x.dp - sz / 2, -sz * 0.08f)) {
-        Avatar(PitLook, sz, mood = if (vm.bubbles.containsKey(CasualViewModel.PIT)) Mood.NEUTRAL else Mood.NEUTRAL, talking = vm.bubbles.containsKey(CasualViewModel.PIT), phase = 0.7f, walking = moving, name = "Pit boss")
+        val ps = p?.seat ?: 2
+        val pg = dirTo(if (ps <= 1) 0.14f else 0.86f, 0.1f, SeatX[ps.coerceIn(0, 3)], 0.72f)
+        Avatar(PitLook, sz, talking = vm.bubbles.containsKey(CasualViewModel.PIT), phase = 0.7f, walking = moving, name = "Pit boss", gazeX = pg.x, gazeY = pg.y)
         Text("PIT", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Gold, modifier = Modifier.align(Alignment.BottomCenter).offset(y = -sz * 0.12f).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp))
     }
 }
@@ -402,7 +483,7 @@ private fun SeatBlock(vm: CasualViewModel, i: Int, s: Seat, x: Dp, y: Dp, seatW:
                     val total = card + step * (cards.size - 1).coerceAtLeast(0)
                     Box(Modifier.width(total).height(card * 1.4f)) {
                         cards.forEachIndexed { k, (c, seq) ->
-                            key(seq) { TableCard(c, card, true, DpOffset(shoe.x - (x - total / 2 + step * k), shoe.y - y), animate = !vm.instant, durationMs = pitchMs, modifier = Modifier.offset(x = step * k)) }
+                            key(seq) { TableCard(c, card, true, DpOffset(shoe.x - (x - total / 2 + step * k), shoe.y - y), animate = !vm.instant, durationMs = pitchMs, modifier = Modifier.offset(x = step * k), restTilt = ((seq * 37) % 7 - 3) * 0.9f, lift = true) }
                         }
                     }
                 } else if (s.sittingOut && vm.dealtOnce) {
@@ -421,12 +502,15 @@ private fun SeatBlock(vm: CasualViewModel, i: Int, s: Seat, x: Dp, y: Dp, seatW:
                 if (hand != null) { Spacer(Modifier.width(3.dp)); CasualChipStack(hand.bet, 15.dp) }
             }
             Box(Modifier.graphicsLayer { translationX = dir * enter.value * 220 * density.density; alpha = 1f - enter.value }, contentAlignment = Alignment.BottomCenter) {
-                Avatar(s.who.look, avatar, mood = vm.moods[s.id] ?: Mood.NEUTRAL, talking = vm.bubbles.containsKey(i), phase = (s.id % 7) / 7f, walking = enter.value > 0.02f, name = s.who.name)
+                val glance = rememberGlance(s.id * 31 + i)
+                val mood = vm.moods[s.id]
+                val gz = if (enter.value > 0.02f) Offset(0f, -0.2f) else seatGaze(vm, i, glance, hand != null && !vm.roundOver, vm.bubbles.containsKey(i), mood)
+                Avatar(s.who.look, avatar, mood = mood ?: Mood.NEUTRAL, talking = vm.bubbles.containsKey(i), phase = (s.id % 7) / 7f, walking = enter.value > 0.02f, name = s.who.name, gazeX = gz.x, gazeY = gz.y)
                 vm.actions[i]?.let { a ->
                     Text(a, fontSize = 12.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.align(Alignment.TopEnd).offset(x = avatar * 0.2f, y = avatar * 0.1f).background(Gold, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 1.dp))
                 }
             }
-            Text(s.who.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(s.who.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (vm.bubbles.containsKey(i)) SeatColors[i] else Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(money(s.chips), fontSize = 11.sp, color = Gold, maxLines = 1)
         }
     }
@@ -470,8 +554,8 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
         }
         Text(if (vm.bet > 0) money(vm.bet) else "Tap chips to bet", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Cream, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = cy + circle + 4.dp))
         if (vm.settings.sideBets) {
-            SideSpot("Perfect Pairs", vm.ppBet, Modifier.offset(w / 2 - circle / 2 - 92.dp, cy + 8.dp)) { vm.cyclePP() }
-            SideSpot("21+3", vm.tpBet, Modifier.offset(w / 2 + circle / 2 + 12.dp, cy + 8.dp)) { vm.cycleTP() }
+            SideSpot("Perfect Pairs", vm.ppBet, Modifier.offset(w / 2 - 78.dp, cy - 72.dp)) { vm.cyclePP() }
+            SideSpot("21+3", vm.tpBet, Modifier.offset(w / 2 + 0.dp, cy - 72.dp)) { vm.cycleTP() }
         }
     }
     if (hands.isNotEmpty() && !(bettingView && !vm.roundOver)) {
@@ -491,7 +575,7 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
             cards.forEachIndexed { k, (c, seq) ->
                 key(seq) {
                     val cxk = x0 + step * k
-                    TableCard(c, cw, true, DpOffset(shoe.x - cxk, shoe.y - top), animate = !vm.instant, durationMs = pitchMs, modifier = Modifier.offset(cxk, top).graphicsLayer { rotationZ = if (h.doubled && k == 2) 90f else 0f })
+                    TableCard(c, cw, true, DpOffset(shoe.x - cxk, shoe.y - top), animate = !vm.instant, durationMs = pitchMs, modifier = Modifier.offset(cxk, top).graphicsLayer { rotationZ = if (h.doubled && k == 2) 90f else 0f }, restTilt = ((seq * 41) % 5 - 2) * 0.7f, lift = true)
                 }
             }
             val y2 = top + cw * 1.4f + 6.dp
@@ -515,6 +599,7 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
         )
         if (notes.isNotEmpty()) Text(notes.joinToString("   "), fontSize = 12.sp, color = Gold, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = top - 20.dp))
     }
+    if (vm.drinkHands > 0) DrinkGlass(Modifier.offset(w / 2 + 92.dp, top + cw * 1.4f - 6.dp))
     vm.hint?.let { Text(it, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Ink, textAlign = TextAlign.Center, modifier = Modifier.offset(w / 2 - 110.dp, top - 34.dp).width(220.dp).background(Gold, RoundedCornerShape(50)).padding(vertical = 4.dp)) }
     if (vm.gs.phase == Phase.INSURANCE && !vm.busy) {
         Text(if (gs.hands.firstOrNull()?.isBlackjack == true) "Even money?" else "Insurance?", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Gold, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = top - 36.dp))
@@ -573,13 +658,13 @@ private fun ResultBanner(b: CasualBanner, modifier: Modifier) {
                 drawCircle(col.copy(alpha = 1f - sparkle.value), 3.dp.toPx(), Offset(center.x + kotlin.math.cos(a) * d, center.y + kotlin.math.sin(a) * d * 0.6f))
             }
         }
-        Column(
-            Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.86f))
-                .border(1.5.dp, if (b.amount > 0) Gold else Cream.copy(alpha = 0.3f), RoundedCornerShape(16.dp)).padding(horizontal = 18.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Row(
+            Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.86f))
+                .border(1.5.dp, if (b.amount > 0) Gold else Cream.copy(alpha = 0.3f), RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (b.title.isNotEmpty()) Text(b.title, fontSize = 20.sp, fontWeight = FontWeight.Black, fontFamily = TitleFont, color = if (b.amount > 0) Gold else Cream)
-            Text(if (b.amount > 0) "+${money(b.amount)}" else if (b.amount < 0) "-${money(-b.amount)}" else "Even", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (b.amount > 0) GoodGreen else if (b.amount < 0) BadRed else Cream)
+            if (b.title.isNotEmpty()) Text(b.title, fontSize = 17.sp, fontWeight = FontWeight.Black, fontFamily = TitleFont, color = if (b.amount > 0) Gold else Cream)
+            Text(if (b.amount > 0) "+${money(b.amount)}" else if (b.amount < 0) "-${money(-b.amount)}" else "Even", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = if (b.amount > 0) GoodGreen else if (b.amount < 0) BadRed else Cream)
         }
     }
 }
@@ -621,7 +706,7 @@ private fun ShuffleShow(style: Int, modifier: Modifier) {
 private fun Toasts(vm: CasualViewModel) {
     val a = vm.toasts.firstOrNull() ?: return
     LaunchedEffect(a.id) { if (!vm.instant) { kotlinx.coroutines.delay(2600); vm.toasts.remove(a) } }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(top = 64.dp), contentAlignment = Alignment.TopCenter) {
         Row(
             Modifier.clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(listOf(Color(0xFFF6DA8C), Gold))).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

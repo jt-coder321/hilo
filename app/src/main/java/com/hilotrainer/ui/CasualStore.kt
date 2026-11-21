@@ -73,6 +73,20 @@ class CasualStore(context: Context?) {
         get() = p?.getStringSet("ach", emptySet())?.toSet() ?: (mem["ach"] as? Set<String> ?: emptySet())
         set(v) = put({ putStringSet("ach", v) }, "ach" to v)
 
+    /** Rooms you were invited to before reaching their bankroll. */
+    var invites: Set<String>
+        get() = p?.getStringSet("invites", emptySet())?.toSet() ?: (mem["invites"] as? Set<String> ?: emptySet())
+        set(v) = put({ putStringSet("invites", v) }, "invites" to v)
+
+    /** Total wagered when the last comp was given. */
+    var compMark: Long
+        get() = long("compMark", 0)
+        set(v) = put({ putLong("compMark", v) }, "compMark" to v)
+
+    /** How many times this regular has sat at your table. */
+    fun met(name: String): Int = int("met_$name", 0)
+    fun addMet(name: String) { val n = met(name) + 1; put({ putInt("met_$name", n) }, "met_$name" to n) }
+
     fun loadSettings(): CasualSettings {
         val d = CasualSettings()
         return CasualSettings(

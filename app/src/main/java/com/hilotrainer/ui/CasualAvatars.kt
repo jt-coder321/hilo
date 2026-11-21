@@ -50,7 +50,7 @@ private fun c(v: Long) = Color(v.toInt())
  * [phase] staggers the idle motion so a table never moves in sync.
  */
 @Composable
-fun Avatar(look: Look, size: Dp, mood: Mood = Mood.NEUTRAL, talking: Boolean = false, phase: Float = 0f, walking: Boolean = false, dealer: Boolean = false, name: String = "", modifier: Modifier = Modifier) {
+fun Avatar(look: Look, size: Dp, mood: Mood = Mood.NEUTRAL, talking: Boolean = false, phase: Float = 0f, walking: Boolean = false, dealer: Boolean = false, name: String = "", gazeX: Float = 0f, gazeY: Float = 0f, modifier: Modifier = Modifier) {
     val live = CasualAnim.live
     var breath = 0f; var blink = 0f; var mouth = 0f; var t = 0f
     if (live) {
@@ -66,6 +66,9 @@ fun Avatar(look: Look, size: Dp, mood: Mood = Mood.NEUTRAL, talking: Boolean = f
     val anger by animateFloatAsState(if (mood == Mood.ANGRY) 1f else 0f, tween(300), label = "anger")
     val wave by animateFloatAsState(if (mood == Mood.WAVE) 1f else 0f, tween(300), label = "wave")
     val nervous = mood == Mood.NERVOUS
+    // Eyes and head glide toward whatever they are looking at.
+    val gx by animateFloatAsState(gazeX.coerceIn(-1f, 1f), tween(380, easing = FastOutSlowInEasing), label = "gx")
+    val gy by animateFloatAsState(gazeY.coerceIn(-1f, 1f), tween(380, easing = FastOutSlowInEasing), label = "gy")
     val desc = remember(name) { if (name.isEmpty()) "Person at the table" else name }
     Canvas(modifier.size(size, size).semantics { contentDescription = desc }) {
         val w = this.size.width; val h = this.size.height
@@ -75,7 +78,7 @@ fun Avatar(look: Look, size: Dp, mood: Mood = Mood.NEUTRAL, talking: Boolean = f
         val walkBob = if (walking) -kotlin.math.abs(sin(t * tau * 2)) * h * 0.04f else 0f
         val shake = if (anger > 0.5f) sin(t * tau * 6) * w * 0.02f else 0f
         translate(left = shake, top = bob + jump + walkBob + slump * h * 0.05f) {
-            drawPerson(look, w, h, armsUp, slump, anger, wave, nervous, blink, mouth, mood, t, dealer)
+            drawPerson(look, w, h, armsUp, slump, anger, wave, nervous, blink, mouth, mood, t, dealer, gx, gy, sin((breath + phase * 3f) * tau), phase, live)
         }
     }
 }
@@ -105,6 +108,7 @@ private fun almond(x: Float, y: Float, hw: Float, hh: Float, lower: Float = 0.7f
 private fun DrawScope.drawPerson(
     look: Look, w: Float, h: Float, armsUp: Float, slump: Float, anger: Float, wave: Float,
     nervous: Boolean, blink: Float, mouth: Float, mood: Mood, t: Float, dealer: Boolean,
+    gx: Float = 0f, gy: Float = 0f, sway: Float = 0f, phase: Float = 0f, live: Boolean = false,
 ) {
     val skin = c(look.skin).let { if (anger > 0f) lerp(it, Color(0xFFE5735F), anger * 0.45f) else it }
     val skinLo = shade(skin, 0.28f); val skinHi = tint(skin, 0.16f)
@@ -251,6 +255,12 @@ private fun DrawScope.drawPerson(
         drawPath(lock, hairBrush)
     }
 
+    // The head turns a little toward what it is looking at, sways softly, and drops when sad.
+    val tau2 = (2 * PI).toFloat()
+    val nod = if (mouth > 0f) sin(t * tau2 * 3f) * 0.8f else 0f
+    val tilt = sway * 0.9f + gx * 2.2f + slump * 5f - (if (mood == Mood.CHEER) 3f else 0f) + nod + (if (nervous) sin(t * tau2 * 2f) * 1.2f else 0f)
+    val hx = gx * R * 0.07f; val hy = gy * R * 0.035f + slump * R * 0.05f
+    rotate(tilt, Offset(cx, headY + R * 1.15f)) { translate(hx, hy) {
     // Ears, then the face itself.
     for (side in intArrayOf(-1, 1)) {
         val ex0 = cx + side * rx * 1.02f
@@ -308,7 +318,7 @@ private fun DrawScope.drawPerson(
     // Eyes.
     val eyeY = headY + R * 0.02f
     val eyeDx = R * 0.4f
-    val hw = R * 0.19f; val hh = R * 0.085f
+    val hw = R * 0.19f; val hh = R * 0.085f * (1f - 0.28f * gy.coerceAtLeast(0f))
     val gaze = if (nervous) sin(t * 2 * PI.toFloat()) * R * 0.1f else 0f
     val irisC = if (lum(hairC) > 0.62f && lum(skin) > 0.55f) Color(0xFF4F83B5) else if (lum(skin) < 0.4f) Color(0xFF2B1B10) else Color(0xFF5A3A22)
     val lid = shade(skin, 0.55f)
@@ -334,7 +344,7 @@ private fun DrawScope.drawPerson(
                 val a = almond(lx, eyeY, hw, hh)
                 drawPath(a, Color(0xFFF6F1EA))
                 clipPath(a) {
-                    val ic = Offset(lx + gaze, eyeY + slump * R * 0.03f)
+                    val ic = Offset(lx + gaze + gx * hw * 0.5f + (if (live) sin(t * tau2 * 3f + phase * 9f) * hw * 0.04f else 0f), eyeY + slump * R * 0.03f + gy * hh * 0.7f)
                     drawCircle(Brush.radialGradient(listOf(tint(irisC, 0.25f), irisC, shade(irisC, 0.5f)), center = ic, radius = hh * 1.2f), hh * 1.15f, ic)
                     drawCircle(Color.Black, hh * 0.5f, ic)
                     drawCircle(Color.White.copy(alpha = 0.9f), hh * 0.22f, ic + Offset(-hh * 0.35f, -hh * 0.4f))
@@ -362,7 +372,7 @@ private fun DrawScope.drawPerson(
         }
     }
     // Brows: tapered strokes. Angry slants down, sad slants up.
-    val browY = eyeY - R * 0.33f
+    val browY = eyeY - R * 0.33f - (if (mouth > 0.5f) R * 0.03f else 0f) - (if (mood == Mood.NERVOUS) R * 0.04f else 0f)
     val tilt = (anger - slump * 0.8f) * R * 0.12f
     val bw = if (feminine) R * 0.05f else R * 0.085f
     for (side in intArrayOf(-1, 1)) {
@@ -428,12 +438,14 @@ private fun DrawScope.drawPerson(
         drawArc(Color(0xFF212121), 180f, 180f, false, Offset(cx - R * 1.1f, headY - R * 1.15f), Size(R * 2.2f, R * 2.0f), style = Stroke(R * 0.12f))
         for (side in intArrayOf(-1, 1)) drawRoundRect(Brush.verticalGradient(listOf(Color(0xFF4DD0E1), Color(0xFF00838F)), startY = headY - R * 0.1f, endY = headY + R * 0.45f), Offset(cx + side * R * 1.07f - R * 0.17f, headY - R * 0.1f), Size(R * 0.35f, R * 0.55f), CornerRadius(R * 0.12f))
     }
+    } }
     // Arms down in front when resting.
     if (up <= 0.05f && wave <= 0.05f) {
         val handY = h * 0.98f
         for (side in intArrayOf(-1, 1)) {
-            drawLine(shade(shirt, 0.1f), Offset(cx + side * w * 0.36f, shoulderY + h * 0.08f), Offset(cx + side * w * 0.2f, handY), armW, StrokeCap.Round)
-            drawLine(tint(shirt, 0.1f), Offset(cx + side * w * 0.36f - side * armW * 0.2f, shoulderY + h * 0.08f), Offset(cx + side * w * 0.2f - side * armW * 0.2f, handY), armW * 0.3f, StrokeCap.Round)
+            val fid = if (live) sin(t * tau2 + side * 1.7f + phase * 6f) * w * 0.012f else 0f
+            drawLine(shade(shirt, 0.1f), Offset(cx + side * w * 0.36f, shoulderY + h * 0.08f), Offset(cx + side * w * 0.2f + fid, handY), armW, StrokeCap.Round)
+            drawLine(tint(shirt, 0.1f), Offset(cx + side * w * 0.36f - side * armW * 0.2f, shoulderY + h * 0.08f), Offset(cx + side * w * 0.2f - side * armW * 0.2f + fid, handY), armW * 0.3f, StrokeCap.Round)
         }
     }
 }

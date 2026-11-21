@@ -114,8 +114,7 @@ private fun TableTab(vm: CasualViewModel) {
     Seg("Decks", decks.map { "$it" }, decks.indexOf(s.decks).coerceAtLeast(0)) { if (!mid) vm.update(s.copy(decks = decks[it])) }
     Seg("Dealer on soft 17", listOf("Stands", "Hits"), if (s.dealerHitsSoft17) 1 else 0) { if (!mid) vm.update(s.copy(dealerHitsSoft17 = it == 1)) }
     Seg("Blackjack pays", listOf("3 to 2", "6 to 5"), if (s.sixToFive) 1 else 0, "3 to 2 is the better deal for you.") { if (!mid) vm.update(s.copy(sixToFive = it == 1)) }
-    val mins = listOf(5, 10, 25, 100)
-    Seg("Table limits", mins.map { "${money(it)}" }, mins.indexOf(s.tableMin).coerceAtLeast(0), "Minimum bet. The maximum is 100 times the minimum.") { if (!mid) vm.update(s.copy(tableMin = mins[it])) }
+    TierList(vm, enabled = !mid)
     Seg("Other players", (0..4).map { "$it" }, s.seats, "How many seats around you can fill up.") { if (!mid) vm.update(s.copy(seats = it)) }
     Toggle("Players come and go", s.comeAndGo, "People sit down and leave between hands, like a real casino.") { vm.update(s.copy(comeAndGo = it)) }
     Toggle("Surrender", s.surrender, "Give up a bad hand and get half your bet back.") { if (!mid) vm.update(s.copy(surrender = it)) }

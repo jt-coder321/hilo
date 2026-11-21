@@ -231,6 +231,8 @@ class TableLife(
     var shuffleUpNow = false
     /** Counters who were backed off tonight and can't come back. */
     private val barred = mutableSetOf<String>()
+    /** Kinds of players this room does not seat (no tourists in the high limit room). */
+    var exclude: Set<Archetype> = emptySet()
 
     val maxBet: Int get() = unit * 100
 
@@ -251,7 +253,7 @@ class TableLife(
         val open = seats.indices.filter { seats[it] == null && it in this.open }
         if (open.isEmpty()) return null
         val here = seats.mapNotNull { it?.who?.name }.toSet()
-        val pool = Cast.ALL.filter { it.name !in here && it.name !in barred }
+        val pool = Cast.ALL.filter { it.name !in here && it.name !in barred && it.archetype !in exclude }
         if (pool.isEmpty()) return null
         // Counters prefer to walk in on a good count (back-counting). Everyone else is random.
         val weighted = pool.flatMap { m ->
