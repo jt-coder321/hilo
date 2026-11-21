@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.HiLoTrainer" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0B3D2A</item>
+        <item name="android:navigationBarColor">#0B3D2A</item>
+        <item name="android:windowBackground">@color/felt</item>
+    </style>
+</resources>
