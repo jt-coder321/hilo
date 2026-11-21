@@ -163,9 +163,12 @@ private fun TopBar(vm: CasualViewModel, onBack: () -> Unit, openMenu: (Int) -> U
     }
 }
 
-/** Where each of the five other seats sits on the arc, as a fraction of the width, and how far down. */
-private val SeatX = listOf(0.1f, 0.3f, 0.5f, 0.7f, 0.9f)
-private val SeatDrop = listOf(0.0f, 0.55f, 0.8f, 0.55f, 0.0f)
+/**
+ * The four other seats sit on a curved row that bends down toward you. Nobody sits between you and the
+ * dealer: you take the lowest point of the curve at the bottom center, with the others beside you.
+ */
+private val SeatX = listOf(0.1f, 0.265f, 0.735f, 0.9f)
+private const val SEATS = 4
 
 @Composable
 private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
@@ -175,18 +178,23 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
     val dealerSize = (dz * 0.95f).coerceAtMost(150.dp)
     val dCard = (44 * scale).dp
     val dCardsY = dz + 6.dp
-    val seatW = w / 5
-    val sCard = minOf((32 * scale).dp, seatW * 0.42f)
-    val avatar = minOf((56 * scale).dp, seatW * 0.82f)
+    val seatW = w / 4.6f
+    val sCard = minOf((34 * scale).dp, seatW * 0.5f)
+    val avatar = minOf((58 * scale).dp, seatW * 0.85f)
     val youCard = (60 * scale).dp
-    // Stack from the bottom: your cards, then the seats above them.
     val youTop = h - youCard * 1.4f - 44.dp
-    val seatBlock = sCard * 1.4f + 22.dp + avatar + 44.dp
-    val seatTop = (youTop - 10.dp - seatBlock - h * 0.06f * 0.8f).coerceAtLeast(dCardsY + dCard * 1.4f + 8.dp)
-    val shoe = DpOffset(minOf(w - 44.dp, w / 2 + dealerSize * 0.5f + 110.dp), dz * 0.55f)
+    // The curve: its lowest point is just under your cards, and the seats follow it up and out.
+    val arcLow = youTop + youCard * 1.4f + 30.dp
+    val arcEnd = arcLow - h * 0.17f
+    val seatBlock = sCard * 1.4f + 22.dp + avatar + 40.dp
     val seatXdp = { i: Int -> w * SeatX[i] }
-    val seatYdp = { i: Int -> seatTop + (h * 0.06f) * SeatDrop[i] }
+    val arcY = { xf: Float -> arcEnd + (arcLow - arcEnd) * (1f - (2f * xf - 1f) * (2f * xf - 1f)) }
+    val seatYdp = { i: Int -> arcY(SeatX[i]) - seatBlock - 12.dp }
+    // The shoe sits right beside the dealer, so the dealing arm stays short.
+    val shoe = DpOffset(w / 2 + dealerSize * 0.5f + 32.dp, dz * 0.68f)
+    val tray = DpOffset(w / 2 - dealerSize * 0.5f - 46.dp, dz * 0.68f)
     val pitchMs = when (vm.dealer.pitch) { 0 -> 230; 1 -> 330; else -> 460 }
+    val sweep by animateFloatAsState(if (vm.sweeping) 1f else 0f, tween(if (vm.sweeping) 420 else 0, easing = FastOutSlowInEasing), label = "sweep")
 
     // Printing on the felt.
     val theme = vm.settings.theme
@@ -199,14 +207,19 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
         Text("${money(vm.settings.tableMin)} to ${money(vm.maxBet)}", fontSize = (10 * scale).sp, color = theme.print.copy(alpha = 0.4f))
     }
     Canvas(Modifier.fillMaxSize()) {
-        // The curve of the table edge in front of the dealer.
-        drawArc(theme.print.copy(alpha = 0.25f), 20f, 140f, false, Offset(-size.width * 0.15f, size.height * 0.05f), Size(size.width * 1.3f, size.height * 0.62f), style = Stroke(2.dp.toPx()))
+        // The curve the seats follow, drawn through the foot of every seat and under your cards.
+        val e = arcEnd.toPx() + 6.dp.toPx(); val m = arcLow.toPx() + 2.dp.toPx()
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(0f, e); quadraticTo(size.width / 2, 2 * m - e, size.width, e)
+        }
+        drawPath(path, theme.print.copy(alpha = 0.28f), style = Stroke(2.dp.toPx()))
     }
 
     // Dealer's chip rack.
-    Row(Modifier.offset(12.dp, dz * 0.62f), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(Modifier.offset(8.dp, dz * 0.9f), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         listOf(5, 25, 100, 500, 1000).forEach { v -> CasualChipStack(v, 16.dp) }
     }
+    DiscardTray(tray, gs.cardsDealt, gs.totalCards)
     // Pit boss walks in behind the dealer and stands near the player he's watching.
     PitBoss(vm, w, dz, seatXdp)
     // Dealer and the hand that deals.
@@ -218,6 +231,11 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
         val step = dCard * 0.62f
         val total = dCard + step * (dealerCards.size - 1)
         val x0 = (w - total) / 2
+        val dens = LocalDensity.current.density
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            translationX = (tray.x.value - (x0 + total / 2).value) * dens * sweep; translationY = (tray.y.value - dCardsY.value) * dens * sweep
+            alpha = 1f - sweep; scaleX = 1f - 0.5f * sweep; scaleY = 1f - 0.5f * sweep
+        }) {
         dealerCards.forEachIndexed { i, (c, seq) ->
             key(seq) {
                 val faceUp = i != 1 || (gs.holeRevealed && gs.holeRevealSeq < vm.shown)
@@ -227,11 +245,12 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
         }
         val visible = dealerCards.mapIndexedNotNull { i, (c, _) -> if (i != 1 || (gs.holeRevealed && gs.holeRevealSeq < vm.shown)) c else null }
         TotalPill(visible, Modifier.offset(x0 + total + 6.dp, dCardsY + dCard * 0.4f))
+        }
     }
     if (vm.shuffling) ShuffleShow(vm.dealer.shuffle, Modifier.offset(w / 2 - 70.dp, dz + 8.dp))
 
     // Other players.
-    for (i in 0 until 5) {
+    for (i in 0 until SEATS) {
         val seat = vm.seatView[i]
         val x = seatXdp(i); val y = seatYdp(i)
         Box(Modifier.offset(x - seatW / 2, y).width(seatW)) {
@@ -240,12 +259,16 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
                 Box(Modifier.align(Alignment.TopCenter).offset(y = sCard * 1.5f).size(avatar * 0.7f).border(1.5.dp, theme.print.copy(alpha = 0.22f), CircleShape))
             }
         }
-        if (seat != null) SeatBlock(vm, i, seat, x, y, seatW, sCard, avatar, shoe, pitchMs)
+        if (seat != null) SeatBlock(vm, i, seat, x, y, seatW, sCard, avatar, shoe, pitchMs, sweep, tray)
     }
     for (d in vm.departing) key(d.key) { Walker(d.s, seatXdp(d.seat), seatYdp(d.seat) + sCard * 1.4f + 10.dp, avatar, toRight = d.seat >= 2, away = true, phase = d.seat * 0.2f) }
 
     // You.
-    YourSpot(vm, w, youTop, youCard, shoe, pitchMs, scale)
+    YourSpot(vm, w, youTop, youCard, shoe, pitchMs, scale, sweep, tray)
+    PayoutFlights(vm, DpOffset(52.dp, dz * 0.9f + 8.dp)) { seat ->
+        if (seat >= CasualViewModel.YOU) DpOffset(w / 2 + 54.dp, youTop + youCard * 1.4f + 16.dp)
+        else DpOffset(seatXdp(seat) - 10.dp, seatYdp(seat) + sCard * 1.4f + 11.dp)
+    }
 
     // Speech bubbles on top of everything.
     vm.bubbles[CasualViewModel.DEALER]?.let { b ->
@@ -254,13 +277,13 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
     }
     vm.bubbles[CasualViewModel.PIT]?.let { b ->
         val px = pitX(vm.pit?.seat ?: 2, w, seatXdp)
-        val bw = minOf(190.dp, w * 0.46f)
-        key(b.key) { SpeechBubble(b.text, Modifier.offset((px - bw / 2).coerceIn(4.dp, w - bw - 4.dp), dz * 0.78f).width(bw), dark = true) }
+        val bw = minOf(160.dp, w * 0.4f)
+        key(b.key) { SpeechBubble(b.text, Modifier.offset(if (px < w / 2) 4.dp else w - bw - 4.dp, dCardsY + dCard * 1.4f + 4.dp).width(bw), dark = true) }
     }
-    for (i in 0 until 5) vm.bubbles[i]?.let { b ->
-        val bw = minOf(170.dp, w * 0.42f)
+    for (i in 0 until SEATS) vm.bubbles[i]?.let { b ->
+        val bw = minOf(150.dp, w * 0.4f)
         val bx = (seatXdp(i) - bw / 2).coerceIn(4.dp, w - bw - 4.dp)
-        key(b.key) { SpeechBubble(b.text, Modifier.offset(bx, seatYdp(i) - 30.dp - (if (i % 2 == 1) 34.dp else 0.dp)).width(bw)) }
+        key(b.key) { SpeechBubble(b.text, Modifier.offset(bx, seatYdp(i) - 30.dp - (if (i == 1 || i == 2) 34.dp else 0.dp)).width(bw)) }
     }
     // How your round went, over the felt printing.
     vm.banner?.let { b -> key(b.key) { ResultBanner(b, Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 8.dp)) } }
@@ -268,7 +291,7 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp) {
 
 private fun pitX(seat: Int, w: Dp, seatX: (Int) -> Dp): Dp =
     // He stands behind the dealer on the side of the player he's watching, clear of the shoe.
-    if (seat <= 2) minOf(w * 0.2f, w / 2 - 110.dp) else maxOf(w * 0.8f, w / 2 + 110.dp).coerceAtMost(w - 130.dp)
+    if (seat <= 1) w * 0.14f else w * 0.86f
 
 @Composable
 private fun DealerZone(vm: CasualViewModel, w: Dp, dz: Dp, size: Dp, seatX: (Int) -> Dp, shoe: DpOffset) {
@@ -296,33 +319,49 @@ private fun DealerZone(vm: CasualViewModel, w: Dp, dz: Dp, size: Dp, seatX: (Int
         Avatar(dealer.look, size, mood = if (shownIdx == vm.dealerIdx) vm.dealerMood else Mood.NEUTRAL, talking = vm.bubbles.containsKey(CasualViewModel.DEALER), phase = 0.3f, walking = walking, dealer = true, name = "Dealer ${dealer.name}")
         Text(dealer.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, modifier = Modifier.align(Alignment.TopStart).offset(x = size * 0.02f, y = size * 0.12f).background(Gold, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp))
     }
-    // The dealing hand. It rests by the shoe and reaches toward whoever gets the card.
+    // The dealing hand stays next to the shoe. To pitch a card it flicks a short way toward the seat, and the
+    // card itself glides across the felt (see TableCard). It never stretches across the table.
     val r = vm.reach
-    val tx = when {
-        r == null -> shoe.x - 18.dp
-        r.target == CasualViewModel.DEALER -> w / 2
-        r.target >= CasualViewModel.YOU -> w / 2 + ((r.target - CasualViewModel.YOU) * 40).dp
-        else -> seatX(r.target)
+    val restX = shoe.x.value - 22f; val restY = shoe.y.value + 4f
+    val reachMax = 30f
+    var tx = restX; var ty = restY
+    if (r != null) {
+        val gx: Float; val gy: Float
+        when {
+            r.target == CasualViewModel.DEALER -> { gx = w.value / 2; gy = dz.value + 10f }
+            r.target >= CasualViewModel.YOU -> { gx = w.value / 2 + (r.target - CasualViewModel.YOU) * 40f; gy = dz.value + 80f }
+            else -> { gx = seatX(r.target).value; gy = dz.value + 80f }
+        }
+        val dx = gx - restX; val dy = gy - restY
+        val dist = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+        val k = minOf(1f, reachMax / dist)
+        tx = restX + dx * k; ty = restY + dy * k
     }
-    val ty = if (r == null) shoe.y + 6.dp else if (r.target == CasualViewModel.DEALER) dz + 10.dp else dz + 26.dp
-    val hx by animateFloatAsState(tx.value, if (vm.instant) tween(0) else spring(stiffness = 900f, dampingRatio = 0.8f), label = "hx")
-    val hy by animateFloatAsState(ty.value, if (vm.instant) tween(0) else spring(stiffness = 900f, dampingRatio = 0.8f), label = "hy")
+    val hx by animateFloatAsState(tx, if (vm.instant) tween(0) else spring(stiffness = 1100f, dampingRatio = 0.75f), label = "hx")
+    val hy by animateFloatAsState(ty, if (vm.instant) tween(0) else spring(stiffness = 1100f, dampingRatio = 0.75f), label = "hy")
     if (!walking) Canvas(Modifier.fillMaxSize()) {
         val sh = Offset((w / 2 + size * 0.3f).toPx(), (size * 0.72f).toPx())
         val hand = Offset(hx.dp.toPx(), hy.dp.toPx())
         val sleeve = Color(dealer.look.shirt.toInt())
         val skin = Color(dealer.look.skin.toInt())
-        drawLine(sleeve, sh, Offset((sh.x + hand.x) / 2, (sh.y + hand.y) / 2 + 6.dp.toPx()), (size * 0.1f).toPx(), StrokeCap.Round)
-        drawLine(Color.White, Offset((sh.x + hand.x) / 2, (sh.y + hand.y) / 2 + 6.dp.toPx()), hand, (size * 0.08f).toPx(), StrokeCap.Round)
+        val elbow = Offset(sh.x + (hand.x - sh.x) * 0.35f + 6.dp.toPx(), maxOf(sh.y, hand.y) + 12.dp.toPx())
+        drawLine(sleeve, sh, elbow, (size * 0.1f).toPx(), StrokeCap.Round)
+        drawLine(Color.White, elbow, hand, (size * 0.08f).toPx(), StrokeCap.Round)
         drawCircle(skin, (size * 0.055f).toPx(), hand)
-        if (r != null) {
-            drawRoundRect(Color(0xFF9E1B2C), Offset(hand.x - 7.dp.toPx(), hand.y - 13.dp.toPx()), Size(14.dp.toPx(), 19.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()))
-        }
-        // Left hand resting on the felt.
+        // Left hand rests on the felt.
         val sl = Offset((w / 2 - size * 0.3f).toPx(), (size * 0.72f).toPx())
-        val lh = Offset((w / 2 - size * 0.42f).toPx(), (dz + 2.dp).toPx())
+        val lh = Offset((w / 2 - size * 0.4f).toPx(), (size * 0.88f).toPx())
         drawLine(sleeve, sl, lh, (size * 0.1f).toPx(), StrokeCap.Round)
         drawCircle(skin, (size * 0.055f).toPx(), lh)
+    }
+}
+
+/** The discard tray: swept cards land here and the stack grows as the shoe is dealt. */
+@Composable
+private fun DiscardTray(at: DpOffset, dealt: Int, total: Int) {
+    val frac = if (total == 0) 0f else (dealt.toFloat() / total).coerceIn(0f, 1f)
+    Box(Modifier.offset(at.x - 22.dp, at.y - 20.dp).size(44.dp, 34.dp).clip(RoundedCornerShape(5.dp)).background(Brush.verticalGradient(listOf(Color(0xFF3B3B3B), Color(0xFF151515)))).border(1.dp, Gold.copy(alpha = 0.4f), RoundedCornerShape(5.dp)).semantics { contentDescription = "Discard tray" }) {
+        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(34.dp, (4 + 22 * frac).dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFFEFE8D8)))
     }
 }
 
@@ -341,7 +380,7 @@ private fun PitBoss(vm: CasualViewModel, w: Dp, dz: Dp, seatX: (Int) -> Dp) {
 }
 
 @Composable
-private fun SeatBlock(vm: CasualViewModel, i: Int, s: Seat, x: Dp, y: Dp, seatW: Dp, card: Dp, avatar: Dp, shoe: DpOffset, pitchMs: Int) {
+private fun SeatBlock(vm: CasualViewModel, i: Int, s: Seat, x: Dp, y: Dp, seatW: Dp, card: Dp, avatar: Dp, shoe: DpOffset, pitchMs: Int, sweep: Float, tray: DpOffset) {
     val gs = vm.gs
     val bot = vm.roundSeats.indexOfFirst { it.first == i && it.second == s.id }
     val hand: Hand? = if (bot >= 0) gs.bots.getOrNull(bot) else null
@@ -352,7 +391,11 @@ private fun SeatBlock(vm: CasualViewModel, i: Int, s: Seat, x: Dp, y: Dp, seatW:
     Box(Modifier.offset(x - seatW / 2, y).width(seatW)) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             // Cards on the felt in front of them.
-            Box(Modifier.height(card * 1.4f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            val dens = LocalDensity.current.density
+            Box(Modifier.height(card * 1.4f).fillMaxWidth().graphicsLayer {
+                translationX = (tray.x.value - x.value) * dens * sweep; translationY = (tray.y.value - y.value) * dens * sweep
+                alpha = 1f - sweep; scaleX = 1f - 0.5f * sweep; scaleY = 1f - 0.5f * sweep
+            }, contentAlignment = Alignment.Center) {
                 if (hand != null) {
                     val cards = hand.cards.zip(hand.seqs).filter { it.second < vm.shown }
                     val step = minOf(card * 0.42f, (seatW - card - 4.dp) / (cards.size - 1).coerceAtLeast(1))
@@ -379,6 +422,9 @@ private fun SeatBlock(vm: CasualViewModel, i: Int, s: Seat, x: Dp, y: Dp, seatW:
             }
             Box(Modifier.graphicsLayer { translationX = dir * enter.value * 220 * density.density; alpha = 1f - enter.value }, contentAlignment = Alignment.BottomCenter) {
                 Avatar(s.who.look, avatar, mood = vm.moods[s.id] ?: Mood.NEUTRAL, talking = vm.bubbles.containsKey(i), phase = (s.id % 7) / 7f, walking = enter.value > 0.02f, name = s.who.name)
+                vm.actions[i]?.let { a ->
+                    Text(a, fontSize = 12.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.align(Alignment.TopEnd).offset(x = avatar * 0.2f, y = avatar * 0.1f).background(Gold, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 1.dp))
+                }
             }
             Text(s.who.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(money(s.chips), fontSize = 11.sp, color = Gold, maxLines = 1)
@@ -407,12 +453,13 @@ private fun TotalPill(cards: List<Card>, modifier: Modifier) {
 }
 
 @Composable
-private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffset, pitchMs: Int, scale: Float) {
+private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffset, pitchMs: Int, scale: Float, sweep: Float, tray: DpOffset) {
     val gs = vm.gs
     val hands = if (vm.dealtOnce) gs.hands else emptyList()
     val many = hands.size > 1
     val cw = if (many) card * (if (hands.size > 2) 0.62f else 0.78f) else card
-    val slotW = w / hands.size.coerceAtLeast(1)
+    // Your hands stay in a narrow lane under the middle of the table so they never run over the seats beside you.
+    val slotW = minOf(w * 0.27f, w * 0.8f / hands.size.coerceAtLeast(1))
     // Side bet spots and the main betting circle.
     val circle = (64 * scale).dp
     val bettingView = vm.canBet && !(vm.roundOver && hands.isNotEmpty())
@@ -428,11 +475,16 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
         }
     }
     if (hands.isNotEmpty() && !(bettingView && !vm.roundOver)) {
+        val dens = LocalDensity.current.density
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            translationX = (tray.x.value - w.value / 2) * dens * sweep; translationY = (tray.y.value - top.value) * dens * sweep
+            alpha = 1f - sweep; scaleX = 1f - 0.5f * sweep; scaleY = 1f - 0.5f * sweep
+        }) {
         hands.forEachIndexed { hi, h ->
             val cards = h.cards.zip(h.seqs).filter { it.second < vm.shown }
-            val step = cw * 0.38f
+            val step = minOf(cw * 0.38f, ((slotW - cw) / (cards.size - 1).coerceAtLeast(1)).coerceAtLeast(9.dp))
             val total = cw + step * (cards.size - 1).coerceAtLeast(0)
-            val cx = slotW * hi + slotW / 2
+            val cx = w / 2 + slotW * (hi - (hands.size - 1) / 2f)
             val x0 = cx - total / 2
             val active = gs.phase == Phase.PLAYER && gs.activeHand == hi && many
             Box(Modifier.offset(x0 - 4.dp, top - 4.dp).size(total + 8.dp, cw * 1.4f + 8.dp).then(if (active) Modifier.border(2.dp, Gold, RoundedCornerShape(8.dp)) else Modifier))
@@ -443,7 +495,8 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
                 }
             }
             val y2 = top + cw * 1.4f + 6.dp
-            Row(Modifier.offset(cx - 60.dp, y2).width(120.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.offset(cx - 80.dp, y2).width(160.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                if (hi == 0) { Text("YOU", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.background(Gold, RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp)); Spacer(Modifier.width(5.dp)) }
                 TotalPill(cards.map { it.first }, Modifier)
                 Spacer(Modifier.width(6.dp))
                 CasualChipStack(h.bet, 20.dp)
@@ -453,6 +506,7 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
                     Text(res.outcome.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (res.net > 0) GoodGreen else if (res.net < 0) BadRed else Cream)
                 }
             }
+        }
         }
         // Side bet results.
         val notes = listOfNotNull(
@@ -465,6 +519,26 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
     if (vm.gs.phase == Phase.INSURANCE && !vm.busy) {
         Text(if (gs.hands.firstOrNull()?.isBlackjack == true) "Even money?" else "Insurance?", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Gold, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = top - 36.dp))
     }
+}
+
+@Composable
+private fun PayoutFlights(vm: CasualViewModel, rack: DpOffset, spot: (Int) -> DpOffset) {
+    vm.payouts.forEach { p -> key(p.key) { ChipFlight(p, rack, spot(p.seat), vm.instant) } }
+}
+
+/** Chips slide from the dealer's rack to a winner, or from a loser's bet back into the rack. */
+@Composable
+private fun ChipFlight(p: Payout, rack: DpOffset, spot: DpOffset, instant: Boolean) {
+    val t = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        if (!instant) kotlinx.coroutines.delay(500)
+        t.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
+    }
+    val from = if (p.toDealer) spot else rack
+    val to = if (p.toDealer) rack else spot
+    val x = from.x + (to.x - from.x) * t.value
+    val y = from.y + (to.y - from.y) * t.value - (kotlin.math.sin(t.value * 3.14159f) * 14f).dp
+    Box(Modifier.offset(x - 9.dp, y - 12.dp).graphicsLayer { alpha = if (t.value >= 1f) 0f else 1f }) { CasualChipStack(p.amount, 18.dp) }
 }
 
 @Composable
@@ -547,7 +621,7 @@ private fun ShuffleShow(style: Int, modifier: Modifier) {
 private fun Toasts(vm: CasualViewModel) {
     val a = vm.toasts.firstOrNull() ?: return
     LaunchedEffect(a.id) { if (!vm.instant) { kotlinx.coroutines.delay(2600); vm.toasts.remove(a) } }
-    Box(Modifier.fillMaxSize().padding(bottom = 150.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Row(
             Modifier.clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(listOf(Color(0xFFF6DA8C), Gold))).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,

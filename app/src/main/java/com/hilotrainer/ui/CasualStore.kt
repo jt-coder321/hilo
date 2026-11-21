@@ -23,8 +23,8 @@ data class CasualSettings(
     val surrender: Boolean = true,
     val doubleAfterSplit: Boolean = true,
     val tableMin: Int = 10,
-    /** Other seats at the table, 0 to 5. */
-    val seats: Int = 5,
+    /** Other seats at the table, 0 to 4. You sit at the bottom of the arc. */
+    val seats: Int = 4,
     val comeAndGo: Boolean = true,
     val startPlayers: Int = 3,
     val felt: Int = 0,
@@ -78,7 +78,7 @@ class CasualStore(context: Context?) {
         return CasualSettings(
             decks = int("s_decks", d.decks), dealerHitsSoft17 = bool("s_h17", d.dealerHitsSoft17), sixToFive = bool("s_65", d.sixToFive),
             surrender = bool("s_sur", d.surrender), doubleAfterSplit = bool("s_das", d.doubleAfterSplit), tableMin = int("s_min", d.tableMin),
-            seats = int("s_seats", d.seats), comeAndGo = bool("s_cag", d.comeAndGo), startPlayers = int("s_start", d.startPlayers),
+            seats = int("s_seats", d.seats).coerceIn(0, 4), comeAndGo = bool("s_cag", d.comeAndGo), startPlayers = int("s_start", d.startPlayers),
             felt = int("s_felt", d.felt), cardBack = int("s_back", d.cardBack), sound = bool("s_sound", d.sound), haptics = bool("s_hap", d.haptics),
             speed = int("s_speed", d.speed), hints = bool("s_hints", d.hints), offerInsurance = bool("s_ins", d.offerInsurance),
             sideBets = bool("s_side", d.sideBets), tableTalk = bool("s_talk", d.tableTalk),

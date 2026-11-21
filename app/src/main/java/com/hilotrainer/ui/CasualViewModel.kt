@@ -48,6 +48,9 @@ data class Reach(val target: Int, val key: Long)
 /** Someone getting up, kept on screen while they walk away. */
 data class Departing(val seat: Int, val s: Seat, val key: Long)
 
+/** Chips moving between a seat's bet spot and the dealer's rack after a hand. */
+data class Payout(val key: Long, val seat: Int, val amount: Int, val toDealer: Boolean)
+
 data class CasualBanner(val title: String, val amount: Int, val big: Boolean, val key: Long)
 
 data class PitState(val seat: Int, val key: Long)
@@ -62,12 +65,12 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     var instant = false
     var fx: (Fx) -> Unit = {}
 
-    private val life = TableLife(5, settings.tableMin, rnd, settings.comeAndGo)
+    private val life = TableLife(4, settings.tableMin, rnd, settings.comeAndGo)
     private var game = newGame()
     var gs: GameState by mutableStateOf(game.state()); private set
 
     /** What the screen shows in each seat. Follows the table's events, a step behind the logic. */
-    var seatView by mutableStateOf<List<Seat?>>(List(5) { null }); private set
+    var seatView by mutableStateOf<List<Seat?>>(List(4) { null }); private set
     val departing = mutableStateListOf<Departing>()
     /** Seat ids that just sat down, so they animate in. */
     val arriving = mutableStateMapOf<Long, Long>()
@@ -95,6 +98,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     var pit by mutableStateOf<PitState?>(null); private set
     var shuffling by mutableStateOf(false); private set
     var banner by mutableStateOf<CasualBanner?>(null); private set
+    /** The dealer is sweeping last round's cards into the discard tray. */
+    var sweeping by mutableStateOf(false); private set
+    val payouts = mutableStateListOf<Payout>()
+    /** What a player just did at the table, like "Hit" or "Double", for a moment. */
+    val actions = mutableStateMapOf<Int, String>()
     var hint by mutableStateOf<String?>(null); private set
     val toasts = mutableStateListOf<Achievement>()
     var stats by mutableStateOf(store.loadStats()); private set
@@ -196,10 +204,13 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     fun deal() {
         if (!canBet || bet < settings.tableMin || bet > bankroll) return
         eventsJob?.cancel(); syncSeats()
-        busy = true; hint = null; clearTableForBet(); tpResult = null; tpNet = 0
+        busy = true; hint = null
         store.lastBet = bet
         if (game.state().bankroll != bankroll) game.resetBankroll(bankroll)
         viewModelScope.launch {
+            // The dealer sweeps up last round's cards first.
+            if (roundOver && dealtOnce && !instant && gs.dealerCards.isNotEmpty()) { sweeping = true; fx(Fx.DEAL); delay(520) }
+            clearTableForBet(); tpResult = null; tpNet = 0; payouts.clear()
             life.planBets(game.upcomingTrueCount())
             if (life.shuffleUpNow) {
                 life.shuffleUpNow = false
@@ -235,6 +246,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             }
             if (gs.shuffledThisRound || game.reshuffledByMachine) shuffleAnim()
             shown = gs.roundStartSeq
+            sweeping = false
             store.bankroll = game.state().bankroll
             reveal()
             after()
@@ -278,12 +290,26 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         while (shown < target) {
             val s = shown
             val flip = gs.events.firstOrNull { it.seq == s }?.kind == EventKind.FLIP
-            reach = Reach(ownerOf(s), k())
+            val owner = ownerOf(s)
+            // Another player taking a hit: a short think, and the action shows over them.
+            if (owner in 0 until 4 && s >= gs.roundStartSeq + 2 * (gs.bots.size + 1) + 2) {
+                val b = roundSeats.indexOfFirst { it.first == owner }
+                val hand = gs.bots.getOrNull(b)
+                actions[owner] = if (hand != null && hand.doubled && hand.seqs.lastOrNull() == s) "Double" else "Hit"
+                if (!instant) { delay(600); viewModelScope.launch { delay(1200); actions.remove(owner) } }
+            }
+            reach = Reach(owner, k())
             fx(if (flip) Fx.FLIP else Fx.DEAL)
             shown = s + 1
-            if (!instant) delay(if (flip) cardMs + 220 else cardMs)
+            if (!instant) {
+                delay((if (flip) cardMs + 220 else cardMs) * 6 / 10)
+                // The hand comes back to the shoe between cards.
+                reach = null
+                delay((if (flip) cardMs + 220 else cardMs) * 4 / 10)
+            }
         }
         reach = null
+        if (instant) actions.clear()
     }
 
     private fun ownerOf(seq: Int): Int {
@@ -340,6 +366,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             else -> first.outcome.label
         }
         banner = CasualBanner(title, net, bj || net >= settings.tableMin * 10, k())
+        // The dealer pays winners from the rack and collects losing bets into it.
+        payouts.clear()
+        val pk = k() * 10
+        if (handNet != 0) payouts += Payout(pk, YOU, kotlin.math.abs(handNet), handNet < 0)
+        roundSeats.forEachIndexed { i, (seat, _) -> g.botResults.getOrNull(i)?.let { r -> if (r.net != 0) payouts += Payout(pk + 1 + i, seat, kotlin.math.abs(r.net), r.net < 0) } }
         fx(when { bj -> Fx.BLACKJACK; net > 0 -> Fx.WIN; net < 0 -> Fx.LOSE; else -> Fx.CHIP })
 
         // The dealer reacts.

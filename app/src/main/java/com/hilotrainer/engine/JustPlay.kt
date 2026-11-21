@@ -218,9 +218,9 @@ class TableLife(
     }
 
     private fun spread(n: Int): Set<Int> = when {
-        seatCount != 5 -> (0 until n).toSet()
-        n == 0 -> emptySet(); n == 1 -> setOf(2); n == 2 -> setOf(1, 3); n == 3 -> setOf(0, 2, 4); n == 4 -> setOf(0, 1, 3, 4)
-        else -> (0 until 5).toSet()
+        seatCount != 4 -> (0 until n).toSet()
+        n == 0 -> emptySet(); n == 1 -> setOf(1); n == 2 -> setOf(1, 2); n == 3 -> setOf(0, 1, 2)
+        else -> (0 until 4).toSet()
     }
     private var nextId = 1L
     /** Seat the pit boss is watching, or -1. */

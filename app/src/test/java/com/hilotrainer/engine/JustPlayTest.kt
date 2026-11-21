@@ -61,7 +61,7 @@ class JustPlayTest {
     }
 
     @Test fun counterSpreadsWithTheCountAndWongsOut() {
-        val life = TableLife(5, 10, Random(1))
+        val life = TableLife(4, 10, Random(1))
         seat(life, 0, "Dex")
         life.planBets(0.5); assertEquals(10, life.seats[0]!!.bet)
         life.planBets(4.2); assertEquals(60, life.seats[0]!!.bet)
@@ -71,7 +71,7 @@ class JustPlayTest {
     }
 
     @Test fun touristChasesLosses() {
-        val life = TableLife(5, 10, Random(1))
+        val life = TableLife(4, 10, Random(1))
         seat(life, 1, "Hank")
         life.seats[1] = life.seats[1]!!.copy(lossStreak = 3)
         life.planBets(0.0)
@@ -79,7 +79,7 @@ class JustPlayTest {
     }
 
     @Test fun pitBossWatchesThenBacksOffAHotCounter() {
-        val life = TableLife(5, 10, Random(5), comeAndGo = false)
+        val life = TableLife(4, 10, Random(5), comeAndGo = false)
         seat(life, 3, "Ingrid", chips = 1000, heat = TableLife.HEAT_WATCH)
         val ev = mutableListOf<TableEvent>()
         repeat(6) {
@@ -91,7 +91,7 @@ class JustPlayTest {
     }
 
     @Test fun bustedPlayersLeaveOrRebuyOnce() {
-        val life = TableLife(5, 10, Random(9), comeAndGo = false)
+        val life = TableLife(4, 10, Random(9), comeAndGo = false)
         seat(life, 2, "Grandma Dot", chips = 10)
         val ev = life.afterRound(mapOf(2 to -10), mapOf(2 to Outcome.LOSE), 0.0, false, false)
         assertTrue(ev.any { it is TableEvent.Leave && it.reason == LeaveReason.BUSTED })
@@ -99,26 +99,26 @@ class JustPlayTest {
     }
 
     @Test fun proLeavesAtStopLoss() {
-        val life = TableLife(5, 10, Random(2), comeAndGo = false)
+        val life = TableLife(4, 10, Random(2), comeAndGo = false)
         seat(life, 0, "Mei", chips = 1000)
         val ev = life.afterRound(mapOf(0 to -350), mapOf(0 to Outcome.LOSE), 0.0, false, false)
         assertTrue(ev.any { it is TableEvent.Leave && it.reason == LeaveReason.STOP_LOSS })
     }
 
     @Test fun openSeatsSpreadAndCloseSeats() {
-        val life = TableLife(5, 10, Random(4))
-        life.fill(5)
-        assertEquals(5, life.seats.count { it != null })
+        val life = TableLife(4, 10, Random(4))
+        life.fill(4)
+        assertEquals(4, life.seats.count { it != null })
         val ev = life.setOpenSeats(2)
-        assertEquals(3, ev.size)
-        assertEquals(setOf(1, 3), life.open)
+        assertEquals(2, ev.size)
+        assertEquals(setOf(1, 2), life.open)
         repeat(30) { life.arrive(0.0, force = true) }
         assertTrue(life.seats.indices.all { life.seats[it] == null || it in life.open })
     }
 
     @Test fun longSimulationStaysSane() {
         val rnd = Random(11)
-        val life = TableLife(5, 25, rnd)
+        val life = TableLife(4, 25, rnd)
         val game = BlackjackGame(Rules(), 100000, rnd, unit = 25)
         life.fill(3)
         var backoffs = 0; var arrivals = 0; var leaves = 0

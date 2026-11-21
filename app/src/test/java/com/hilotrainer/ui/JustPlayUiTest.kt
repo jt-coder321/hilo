@@ -80,7 +80,7 @@ class JustPlayUiTest {
         v.update(v.settings.copy(decks = 2, tableMin = 25, seats = 2))
         assertEquals(25, v.bet)
         playOne(v)
-        assertTrue(v.seatView.withIndex().all { (i, s) -> s == null || i in setOf(1, 3) })
+        assertTrue(v.seatView.withIndex().all { (i, s) -> s == null || i in setOf(1, 2) })
     }
 }
 
@@ -108,7 +108,7 @@ abstract class JustPlayShotBase {
 
     private fun table(seed: Int = 8, s: CasualSettings = CasualSettings()): CasualViewModel {
         val v = casualVm(seed, s)
-        listOf(0 to "Hank", 1 to "Grandma Dot", 2 to "Dex", 3 to "Brenda", 4 to "Victor").forEach { (i, n) -> v.seatForTest(i, n) }
+        listOf(0 to "Hank", 1 to "Grandma Dot", 2 to "Brenda", 3 to "Victor").forEach { (i, n) -> v.seatForTest(i, n) }
         return v
     }
 
@@ -131,11 +131,11 @@ abstract class JustPlayShotBase {
         repeat(60) {
             v.deal()
             if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
-            if (v.gs.phase == Phase.PLAYER && v.gs.bots.size >= 4) return@repeat
+            if (v.gs.phase == Phase.PLAYER && v.gs.bots.size >= 3) return@repeat
             while (v.gs.phase == Phase.PLAYER) v.act(Action.STAND)
         }
-        v.sayForTest(3, "Woo! Bachelorette party, coming through!")
-        v.seatView[4]?.let { v.moodForTest(it.id, Mood.CHEER) }
+        v.sayForTest(2, "Woo! Bachelorette party, coming through!")
+        v.seatView[3]?.let { v.moodForTest(it.id, Mood.CHEER) }
         v.seatView[1]?.let { v.moodForTest(it.id, Mood.SAD) }
         shoot("jp-play") { JustPlayScreen(v) {} }
     }
@@ -151,10 +151,10 @@ abstract class JustPlayShotBase {
         val v = table(40)
         v.addChip(25)
         playOne(v)
-        v.pitForTest(2)
+        v.pitForTest(3)
         v.sayForTest(CasualViewModel.PIT, "Sir, you're welcome to play any other game. Not blackjack.")
-        v.sayForTest(2, "Fair enough. I'll cash out.")
-        v.seatView[2]?.let { v.moodForTest(it.id, Mood.NERVOUS) }
+        v.sayForTest(3, "Fair enough. I'll cash out.")
+        v.seatView[3]?.let { v.moodForTest(it.id, Mood.NERVOUS) }
         shoot("jp-pitboss") { JustPlayScreen(v) {} }
     }
 

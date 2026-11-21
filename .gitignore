@@ -1,9 +1,6 @@
-# The signing key stays out of the public repo. It lives in the project files source zip.
-*.iml
 .gradle/
-.idea/
-.kotlin/
-app/build/
 build/
+app/build/
 local.properties
-signing/
+*.iml
+.idea/

@@ -363,7 +363,8 @@ fun UpdatePanel() {
                         found = latest
                         if (latest.versionCode <= code) status = "You have the newest version."
                     } catch (e: Exception) {
-                        status = "Couldn't reach GitHub. Check your connection and try again."
+                        status = if (e.message?.contains("404") == true) "GitHub has no update file yet. The repository may be private, or no update has been published."
+                        else "Couldn't reach GitHub. Check your connection and try again."
                     }
                     busy = false
                 }
