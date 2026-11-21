@@ -1,0 +1,3 @@
+.kotlin/
+# The signing key stays out of the public repo. It lives in the project files source zip.
+signing/
