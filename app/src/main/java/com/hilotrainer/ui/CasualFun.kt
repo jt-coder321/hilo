@@ -252,3 +252,43 @@ fun TierList(vm: CasualViewModel, enabled: Boolean) {
         }
     }
 }
+
+/**
+ * A small tap-to-toggle Hi-Lo counter in the top right corner of the felt, clear of the cards, the bets and the buttons.
+ * Off, it is a faint "Count" tag. On, it shows the running count, the true count and the decks left.
+ */
+@Composable
+fun CountChip(vm: CasualViewModel, modifier: Modifier = Modifier) {
+    val on = vm.settings.showCount
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        modifier.clip(shape).background(Color(if (on) 0xE6101512 else 0x88101512)).border(1.dp, Gold.copy(alpha = if (on) 0.7f else 0.35f), shape)
+            .clickable { vm.update(vm.settings.copy(showCount = !on)) }
+            .semantics { contentDescription = if (on) "Card count on, running ${vm.countRun}, true ${"%.1f".format(vm.countTrue)}, ${vm.decksLeft} decks left. Tap to hide" else "Card count off. Tap to show" }
+            .padding(horizontal = 9.dp, vertical = 3.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        if (!on) {
+            Text("Count", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Gold.copy(alpha = 0.85f))
+        } else {
+            val rc = vm.countRun
+            val tc = vm.countTrue
+            val col = { v: Double -> when { v > 0.49 -> Color(0xFF8EE6A0); v < -0.49 -> Color(0xFFFF9A8A); else -> Cream } }
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text("RUN ", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
+                    Text(signed(rc.toDouble(), 0), fontSize = 16.sp, fontWeight = FontWeight.Black, color = col(rc.toDouble() / 4))
+                }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text("TRUE ", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
+                    Text(signed(tc, 1), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = col(tc))
+                }
+            }
+        }
+    }
+}
+
+private fun signed(v: Double, digits: Int): String {
+    val t = if (digits == 0) v.toInt().toString() else "%.${digits}f".format(v)
+    return if (v > 0 && !t.startsWith("+")) "+$t" else t
+}

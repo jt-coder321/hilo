@@ -235,6 +235,75 @@ abstract class JustPlayShotBase {
     @Test fun chat3() { shoot("jp-chat-log") { JustPlayScreen(chatScene(3)) {} } }
     @Test fun chat4() { shoot("jp-chat-float") { JustPlayScreen(chatScene(4)) {} } }
 
+    @Test fun countFollowsTheCardsAndSurvivesLeaving() {
+        val store = CasualStore(null)
+        store.saveSettings(CasualSettings(showCount = true))
+        val v = CasualViewModel(store, Random(31)).apply { instant = true }
+        assertTrue(v.settings.showCount)
+        repeat(6) { playOne(v); assertEquals(v.gs.runningCount, v.countRun) }
+        // A round you sit out still moves the count, costs nothing and leaves you without a hand.
+        val bank = v.bankroll
+        val dealtBefore = v.gs.cardsDealt
+        v.watch()
+        assertEquals(bank, v.bankroll)
+        assertTrue(v.gs.hands.isEmpty())
+        assertTrue(v.gs.cardsDealt > dealtBefore || v.gs.shuffledThisRound)
+        assertEquals(v.gs.runningCount, v.countRun)
+        // Leave and come back: a new view model on the same store picks the shoe up where it was.
+        val back = CasualViewModel(store, Random(32)).apply { instant = true }
+        assertEquals(v.countRun, back.countRun)
+        assertEquals(v.gs.cardsDealt, back.gs.cardsDealt)
+        assertTrue(back.settings.showCount)
+        // True count is the running count over the decks left.
+        assertEquals(back.countRun / back.decksLeft, back.countTrue, 1e-9)
+    }
+
+    @Test fun eachRoomKeepsItsOwnShoe() {
+        val store = CasualStore(null)
+        val v = CasualViewModel(store, Random(8)).apply { instant = true }
+        repeat(5) { playOne(v) }
+        val room1 = v.countRun
+        val dealt1 = v.gs.cardsDealt
+        v.update(v.settings.copy(tableMin = 25))
+        assertEquals(0, v.gs.cardsDealt)
+        repeat(3) { playOne(v) }
+        v.update(v.settings.copy(tableMin = 10))
+        assertEquals(dealt1, v.gs.cardsDealt)
+        assertEquals(room1, v.countRun)
+    }
+
+    @Test fun countNeverShowsTheHoleCard() {
+        repeat(8) { seed ->
+            val v = casualVm(200 + seed, CasualSettings(showCount = true))
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            if (v.gs.phase == Phase.PLAYER) assertEquals(v.gs.runningCount, v.countRun)
+        }
+    }
+
+    @Test fun countBetweenHands() {
+        val v = table(21, CasualSettings(showCount = true))
+        v.addChip(25)
+        repeat(7) { playOne(v) }
+        shoot("jp-count-between") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun countMidHand() {
+        val w = table(22, CasualSettings(showCount = true))
+        w.addChip(25)
+        repeat(4) { playOne(w) }
+        w.deal()
+        if (w.gs.phase == Phase.INSURANCE) w.insurance(false)
+        shoot("jp-count-midhand") { JustPlayScreen(w) {} }
+    }
+
+    @Test fun countOffIsJustASmallTag() {
+        val v = table(23)
+        v.addChip(25)
+        assertTrue(!v.settings.showCount)
+        shoot("jp-count-off") { JustPlayScreen(v) {} }
+    }
+
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
 
     @Test fun longSessionWithNewTalkStaysHonest() {

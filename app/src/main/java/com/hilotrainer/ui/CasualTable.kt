@@ -284,6 +284,7 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp, onWheel: () -> Unit) {
 
     ChatLayer(vm, w, dz, dCard, dealerSize, seatXdp, seatYdp, youTop)
     FunBadges(vm, onWheel, Modifier.offset(6.dp, 4.dp))
+    CountChip(vm, Modifier.offset(w - 100.dp, 4.dp).width(94.dp))
     // How your round went, over the felt printing.
     vm.banner?.let { b -> key(b.key) { ResultBanner(b, Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 6.dp)) } }
 }
@@ -970,6 +971,7 @@ private fun Controls(vm: CasualViewModel) {
                         if (vm.bet == 0 && vm.store.lastBet > 0) GoldButton("Rebet", Modifier.weight(0.8f), primary = false) { vm.repeatBet() }
                         else GoldButton("Clear", Modifier.weight(0.8f), enabled = vm.bet > 0, primary = false) { vm.clearBet() }
                         GoldButton("x2", Modifier.weight(0.6f), enabled = vm.bet > 0 && vm.bet * 2 <= vm.bankroll, primary = false) { vm.doubleBet() }
+                        if (vm.settings.showCount) GoldButton("Watch", Modifier.weight(0.8f), primary = false) { vm.watch() }
                         GoldButton("Deal", Modifier.weight(1.4f), enabled = vm.bet >= vm.settings.tableMin && vm.bet <= vm.bankroll) { vm.deal() }
                     }
                 }

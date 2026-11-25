@@ -48,6 +48,21 @@ class JustPlayTest {
         }
     }
 
+    @Test fun shoeSnapshotKeepsOrderPositionAndCount() {
+        val a = Shoe(6, 0.75, Random(5))
+        repeat(87) { a.draw() }
+        val text = a.snapshot()
+        val b = Shoe(6, 0.75, Random(99))
+        assertTrue(b.restore(text))
+        assertEquals(a.runningCount, b.runningCount)
+        assertEquals(a.cardsDealt, b.cardsDealt)
+        repeat(30) { assertEquals(a.draw(), b.draw()) }
+        assertEquals(a.runningCount, b.runningCount)
+        // A snapshot from a different shoe size or a damaged one is refused and changes nothing.
+        val c = Shoe(2, 0.75, Random(1)); val before = c.snapshot()
+        assertFalse(c.restore(text)); assertFalse(c.restore("junk")); assertEquals(before, c.snapshot())
+    }
+
     @Test fun talkAvoidsRepeats() {
         TableTalk.resetMemory()
         val r = Random(3)

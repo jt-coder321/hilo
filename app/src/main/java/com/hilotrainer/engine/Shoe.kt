@@ -63,6 +63,27 @@ class Shoe(
         next = (next + n).coerceIn(0, cards.size - 1)
     }
 
+    /** The shoe as text (order, position, running count) so a table can be picked up again later. */
+    fun snapshot(): String =
+        "$decks;$next;$runningCount;" + cards.joinToString(",") { (it.suit.ordinal * 13 + it.rank.ordinal).toString() }
+
+    /** Restores a [snapshot]. Returns false, leaving the shoe alone, if it does not fit this shoe. */
+    fun restore(text: String): Boolean {
+        val parts = text.split(";")
+        if (parts.size != 4) return false
+        val d = parts[0].toIntOrNull() ?: return false
+        val n = parts[1].toIntOrNull() ?: return false
+        val rc = parts[2].toIntOrNull() ?: return false
+        val idx = parts[3].split(",").map { it.toIntOrNull() ?: return false }
+        if (d != decks || idx.size != totalCards || n !in 0..totalCards || idx.any { it !in 0..51 }) return false
+        val ranks = Rank.entries; val suits = Suit.entries
+        if (idx.groupBy { it }.any { it.value.size != decks }) return false
+        cards.clear()
+        idx.forEach { cards.add(Card(ranks[it % 13], suits[it / 13])) }
+        next = n; runningCount = rc; seen.clear()
+        return true
+    }
+
     /** Count a card that was drawn face down and has now been revealed. */
     fun see(card: Card) {
         runningCount += system.tag(card)

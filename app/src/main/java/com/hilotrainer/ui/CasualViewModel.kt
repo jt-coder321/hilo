@@ -83,6 +83,16 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     private val life = TableLife(4, settings.tableMin, rnd, settings.comeAndGo)
     private var game = newGame()
     var gs: GameState by mutableStateOf(game.state()); private set
+    /** Hi-Lo running count of the cards you have seen so far this shoe. Follows the cards as they are shown. */
+    var countRun by mutableIntStateOf(game.shoe.runningCount); private set
+    /** True count, running count over the decks left in the shoe (to the nearest quarter deck, at least half a deck). */
+    val countTrue: Double get() = countRun / decksLeft
+    val decksLeft: Double get() {
+        val pending = (gs.nextSeq - shown).coerceAtLeast(0)
+        val dealt = (gs.cardsDealt - pending).coerceAtLeast(0)
+        return (Math.round((gs.totalCards - dealt) / 52.0 * 4) / 4.0).coerceAtLeast(0.5)
+    }
+    private fun syncCount() { countRun = game.shoe.runningCount - gs.events.filter { it.counted }.sumOf { it.tag } }
 
     /** What the screen shows in each seat. Follows the table's events, a step behind the logic. */
     var seatView by mutableStateOf<List<Seat?>>(List(4) { null }); private set
@@ -288,7 +298,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         mood(s.id, Mood.HAPPY, 1800)
     }
 
-    private fun newGame() = BlackjackGame(settings.rules, bankroll0(), botCount = 0, unit = settings.tableMin)
+    private fun shoeKey() = "${settings.tableMin}_${settings.decks}"
+    private fun newGame() = BlackjackGame(settings.rules, bankroll0(), botCount = 0, unit = settings.tableMin).also { g ->
+        store.loadShoe(shoeKey())?.let { g.shoe.restore(it) }
+    }
+    private fun saveShoe() = store.saveShoe(shoeKey(), game.shoe.snapshot())
     private fun bankroll0() = try { store.bankroll } catch (e: Exception) { CasualStore.START }
 
     /** A random seated player (not [except]) says something for [talk], with [pct] percent chance. */
@@ -415,12 +429,18 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     }
 
     // Play
-    fun deal() {
-        if (!canBet || bet < settings.tableMin || bet > bankroll) return
+    fun deal() = startRound(bet)
+
+    /** Sit a round out: the table plays and you watch and count, with no bet. */
+    fun watch() = startRound(0)
+
+    private fun startRound(stake: Int) {
+        if (!canBet) return
+        if (stake != 0 && (stake < settings.tableMin || stake > bankroll)) return
         eventsJob?.cancel(); syncSeats()
         if (!dareOn) dare = null
         busy = true; hint = null
-        store.lastBet = bet
+        if (stake > 0) store.lastBet = stake
         if (game.state().bankroll != bankroll) game.resetBankroll(bankroll)
         viewModelScope.launch {
             // The dealer sweeps up last round's cards first.
@@ -430,7 +450,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             peekPending = false
             if (life.shuffleUpNow) {
                 life.shuffleUpNow = false
-                game.shoe.shuffle()
+                game.shoe.shuffle(); countRun = game.shoe.runningCount
                 say(DEALER, "Shuffle up.")
                 shuffleAnim()
                 playerSay(Talk.SHUFFLE, 40)
@@ -447,13 +467,13 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                 val s = life.seats[i]!!
                 if (s.bet >= s.who.baseUnits * settings.tableMin * 3 && rnd.nextInt(100) < s.who.talky + 20) TableTalk.say(s.who.archetype, Talk.BIG_BET, rnd)?.let { say(i, it) }
             }
-            val pp = if (settings.sideBets) ppBet.coerceAtMost(bankroll - bet) else 0
-            val tp = if (settings.sideBets && tpBet > 0 && bankroll - bet - pp >= tpBet) tpBet else 0
+            val pp = if (settings.sideBets && stake > 0) ppBet.coerceAtMost(bankroll - stake) else 0
+            val tp = if (settings.sideBets && stake > 0 && tpBet > 0 && bankroll - stake - pp >= tpBet) tpBet else 0
             if (tp > 0) game.tip(tp)
             val before = game.state().bankroll
-            game.deal(bet, pp)
+            game.deal(stake, pp)
             dealtOnce = true
-            bankroll = before - bet - game.state().perfectPairsBet.let { if (it > 0) it else 0 }
+            bankroll = before - stake - game.state().perfectPairsBet.let { if (it > 0) it else 0 }
             gs = game.state()
             if (tp > 0) {
                 val h = gs.hands[0]
@@ -464,6 +484,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             }
             if (gs.shuffledThisRound || game.reshuffledByMachine) shuffleAnim()
             shown = gs.roundStartSeq
+            syncCount()
             sweeping = false
             store.bankroll = game.state().bankroll
             val up = upValue()
@@ -530,6 +551,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             reach = Reach(owner, k())
             fx(if (flip) Fx.FLIP else Fx.DEAL)
             shown = s + 1
+            gs.events.firstOrNull { it.seq == s }?.let { if (it.counted) countRun += it.tag }
             if (!instant) {
                 delay((if (flip) cardMs + 220 else cardMs) * 6 / 10)
                 // The hand comes back to the shoe between cards.
@@ -596,6 +618,9 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         val g = gs
         bankroll = game.state().bankroll
         store.bankroll = bankroll
+        countRun = game.shoe.runningCount
+        saveShoe()
+        val watching = g.hands.isEmpty()
         val handNet = g.results.sumOf { it.net }
         val net = handNet + g.insuranceNet + (g.perfectPairsNet ?: 0) + tpNet
         val wagered = g.hands.sumOf { it.bet } + g.insuranceBet + g.perfectPairsBet + (if (tpResult != null) tpBet else 0)
@@ -615,11 +640,11 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             fiveCardWin = g.hands.zip(g.results).any { (h, r) -> h.cards.size >= 5 && r.net > 0 },
             dealerBust = dealerBust, bankrollAfter = bankroll, maxBetSeen = g.hands.maxOfOrNull { it.bet } ?: 0,
         )
-        stats = Achievements.apply(stats, summary).also { store.saveStats(it) }
-        val newOnes = Achievements.check(earned, stats, summary)
+        stats = if (watching) stats else Achievements.apply(stats, summary).also { store.saveStats(it) }
+        val newOnes = if (watching) emptyList() else Achievements.check(earned, stats, summary)
         if (newOnes.isNotEmpty()) { earned = earned + newOnes.map { it.id }; store.achievements = earned; toasts.addAll(newOnes) }
 
-        funAfterRound(handNet, net, wins)
+        if (!watching) funAfterRound(handNet, net, wins)
 
         val first = g.results.firstOrNull()
         val title = when {
@@ -631,7 +656,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             first.outcome == Outcome.LOSE && dealerBj -> "Dealer blackjack"
             else -> first.outcome.label
         }
-        banner = CasualBanner(title, net, bj || net >= settings.tableMin * 10, k())
+        banner = if (watching) null else CasualBanner(title, net, bj || net >= settings.tableMin * 10, k())
         // The dealer pays winners from the rack and collects losing bets into it.
         payouts.clear()
         val pk = k() * 10
@@ -777,8 +802,9 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         store.saveSettings(n)
         val between = !busy && gs.phase != Phase.PLAYER && gs.phase != Phase.INSURANCE
         if (between && (n.rules != old.rules || n.tableMin != old.tableMin)) {
+            if (n.rules != old.rules) store.clearShoes()
             game = newGame().also { it.resetBankroll(bankroll) }
-            gs = game.state(); shown = 0; roundSeats = emptyList(); roundOver = false; banner = null
+            gs = game.state(); shown = 0; countRun = game.shoe.runningCount; roundSeats = emptyList(); roundOver = false; banner = null
             life.unit = n.tableMin; life.clearPitBoss(); pit = null
             if (n.tableMin != old.tableMin) { bet = n.tableMin.coerceAtMost(bankroll); ppBet = 0; tpBet = 0 }
             if (n.tableMin != old.tableMin) {
