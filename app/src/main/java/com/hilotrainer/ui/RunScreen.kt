@@ -122,9 +122,11 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
     var coinKey by mutableIntStateOf(0)
     var packOpen by mutableStateOf(false)
     var historyOpen by mutableStateOf(false)
+    var guideOpen by mutableStateOf(false)
     private var lastAnte = 0
     private var lastBlindSeen = -1
     private var calloutSeq = 0
+    private var goalSeen = 0
     fun say(text: String, color: Color, power: Int) { callout = Callout(text, color, power, ++calloutSeq) }
     private var seenKey = 0
     private var recorded = false
@@ -137,7 +139,8 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
 
     fun start(d: StartDeck) {
         if (!unlocked(d)) return
-        run = Run(d, rnd); recorded = false; seenKey = 0; lastAnte = 0; lastBlindSeen = -1; packOpen = false; animating = false; sa.clear(); store.runCount = store.runCount + 1; store.runSave = run!!.save(); rev++
+        if (store.runCount == 0) guideOpen = true
+        run = Run(d, rnd).also { it.openStarterPack() }; recorded = false; seenKey = 0; lastAnte = 0; lastBlindSeen = -1; packOpen = false; animating = false; sa.clear(); store.runCount = store.runCount + 1; store.runSave = run!!.save(); rev++
     }
 
     fun resume() {
@@ -233,6 +236,7 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
                 delay(step(750))
             }
         }
+        if (r.goalKey != 0 && r.goalKey != goalSeen) { goalSeen = r.goalKey; say("GOAL DONE +\$${Run.GOAL_PAY}", Color(0xFF2FA866), 2); sfx(Fx.RG_COIN, 1.4f) }
         sa.shown = -1
         fired = emptySet()
         animating = false
@@ -256,7 +260,7 @@ fun RunScreen(store: CasualStore, onExit: () -> Unit, vm: RunVm = remember { Run
     RunMotion.reduce = !vm.store.runMotion || sysOff
     RunMotion.quality = vm.store.runQuality
     val r = vm.run
-    BackHandler { if (vm.historyOpen) vm.historyOpen = false else if (vm.levelsOpen) vm.levelsOpen = false else if (vm.perkOpen != null) vm.perkOpen = null else if (r != null) vm.leaveRun() else onExit() }
+    BackHandler { if (vm.guideOpen) vm.guideOpen = false else if (vm.historyOpen) vm.historyOpen = false else if (vm.levelsOpen) vm.levelsOpen = false else if (vm.perkOpen != null) vm.perkOpen = null else if (r != null) vm.leaveRun() else onExit() }
     val venue = Venues.of(r?.ante ?: 1)
     CompositionLocalProvider(LocalRunSfx provides vm::sfx) {
         RippleLayer(Modifier.fillMaxSize()) {
@@ -283,6 +287,7 @@ fun RunScreen(store: CasualStore, onExit: () -> Unit, vm: RunVm = remember { Run
             if (r != null && vm.levelsOpen) LevelsSheet(vm, r)
             if (r != null && r.pack != null) PackSheet(vm, r)
             if (r == null && vm.historyOpen) HistorySheet(vm)
+            if (vm.guideOpen) RunGuideSheet { vm.guideOpen = false }
             CardWipe(vm.wipeKey, venue.base)
             Shockwave(vm.shockKey, Color(0xFFFFD35A))
             CalloutOverlay(vm.callout, Modifier.padding(top = 80.dp))
@@ -304,6 +309,11 @@ private fun RunTop(vm: RunVm, r: Run?, onBack: () -> Unit) {
             if (r != null && r.phase != RunPhase.OVER && r.phase != RunPhase.WON) Text("Ante ${r.ante}/${Run.MAX_ANTE}  ·  ${if (r.phase == RunPhase.SHOP) "Shop" else r.blindName}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (r.isBoss) BossRed else Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else Text("Roguelike mode, casual only", fontSize = 13.sp, color = Cream.copy(alpha = 0.7f))
         }
+        Text(
+            "?", fontSize = 14.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Ink,
+            modifier = Modifier.padding(end = 8.dp).chunky(Color(0xFF5ED0FF), radius = 8.dp, lift = 2.dp, border = 2.dp).clip(RoundedCornerShape(8.dp)).clickable { vm.guideOpen = true }.padding(horizontal = 10.dp, vertical = 4.dp)
+                .semantics { contentDescription = "How Rogue Run works" },
+        )
         Text(
             "SFX", fontSize = 12.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (vm.soundOn) Ink else Cream.copy(alpha = 0.55f),
             textDecoration = if (vm.soundOn) null else androidx.compose.ui.text.style.TextDecoration.LineThrough,
@@ -356,6 +366,7 @@ private fun StartPane(vm: RunVm) {
                 Text(if (ok) d.desc else "Locked. Reach Ante ${d.unlockAnte + 1} in any run to unlock it.", fontSize = 13.sp, color = Cream.copy(alpha = if (ok) 0.85f else 0.5f))
             }
         }
+        ChunkyButton("How it works in plain words", Color(0xFF2E8BFF), Modifier.widthIn(max = 520.dp).fillMaxWidth(), small = true) { vm.guideOpen = true }
         ChunkyButton("Run history", Color(0xFF6A4DE0), Modifier.widthIn(max = 520.dp).fillMaxWidth(), small = true) { vm.historyOpen = true }
         Text("Best ante ${vm.store.runBest.coerceAtMost(Run.MAX_ANTE).coerceAtLeast(0)}  ·  Runs ${vm.store.runCount}  ·  Wins ${vm.store.runWins}  ·  Best hand ${fmt(vm.store.runBestHand)}", fontSize = 12.sp, color = Cream.copy(alpha = 0.7f), textAlign = TextAlign.Center)
         Text("Casual only. Nothing here touches your training stats.", fontSize = 12.sp, color = Cream.copy(alpha = 0.55f))
@@ -408,13 +419,13 @@ private fun BlindCard(vm: RunVm, r: Run, i: Int) {
             }
             if (boss != null) Text(boss.desc, fontSize = 13.sp, color = BossRed.copy(alpha = 0.95f), fontWeight = FontWeight.Bold)
             if (active) {
-                val hands = when { boss != null && boss.onlyHands > 0 -> boss.onlyHands; else -> r.deck.hands + r.perks.sumOf { it.handsBonus } + (if (i == 2) boss!!.handsDelta else 0) } + r.bonusHands
+                val hands = when { boss != null && boss.onlyHands > 0 -> boss.onlyHands; else -> r.deck.hands + r.perks.sumOf { it.handsBonus } + (if (i == 2) boss!!.handsDelta else 0) + (if (r.ante == 1) 1 else 0) } + r.bonusHands
                 Text("$hands ${if (hands == 1) "hand" else "hands"} to get there", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                     ChunkyButton("Play blind", Color(0xFF2FA866), Modifier.weight(1f)) { vm.sfx(Fx.DEAL, 1f); vm.mut { startBlind() } }
-                    if (i < 2) ChunkyButton("Skip  +\$${Run.SKIP_TAG}", Color(0xFFB8892B), Modifier.weight(0.8f)) { vm.sfx(Fx.RG_COIN, 1f); vm.mut { skipBlind() } }
+                    if (i < 2) ChunkyButton("Skip: ${r.skipTag.label}", Color(0xFFB8892B), Modifier.weight(1f)) { vm.sfx(Fx.RG_COIN, 1f); vm.mut { skipBlind() } }
                 }
-                if (i < 2) Text("Skipping pays \$${Run.SKIP_TAG} and trains a random hand type one level.", fontSize = 11.sp, color = Cream.copy(alpha = 0.6f))
+                if (i < 2) Text(r.skipTag.desc, fontSize = 11.sp, color = Cream.copy(alpha = 0.6f))
             }
         }
     }
@@ -491,6 +502,12 @@ private fun ScoreHud(vm: RunVm, r: Run, dark: Color) {
             val combo = r.comboNow
             if (combo > 0) Text("STREAK ${r.winStreak}  +${fmt1(combo)} mult", fontSize = 11.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color(0xFFFF8A3D), modifier = Modifier.padding(end = 8.dp))
             Text(fmt(shown), fontSize = 20.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold)
+        }
+        r.goal?.let { g ->
+            Text(
+                if (r.goalDone) "BONUS GOAL DONE  +\$${Run.GOAL_PAY}" else "BONUS GOAL: ${g.label}  (+\$${Run.GOAL_PAY})",
+                fontSize = 11.sp, fontWeight = FontWeight.Black, color = if (r.goalDone) GoodGreen else Color(0xFFFFD35A), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
         val prev = if (r.inRound) previewType(r) else null
         val label = if (sa.label.isNotEmpty()) sa.label else if (prev != null) "${prev.label}  Lv.${r.level(prev) + 1}" else ""
@@ -609,7 +626,7 @@ internal fun PerkCard(pk: Perk, idx: Int, popup: Popup?, height: Dp, modifier: M
                 .clickable(onClick = onTap).semantics { contentDescription = "${pk.title}, ${pk.rarity.label} perk. ${pk.desc}" }.padding(horizontal = 3.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(if (pk.edition == Edition.NONE) pk.rarity.label.uppercase() else pk.edition.label.uppercase(), fontSize = 8.sp, letterSpacing = 1.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = edge)
+            PerkArt(pk.id, pk.rarity, badgeCol, size = 30.dp)
             Text(pk.name, fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White, textAlign = TextAlign.Center, maxLines = 2, lineHeight = 12.sp)
             Text(badge, fontSize = 9.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color.White, maxLines = 1, modifier = Modifier.background(badgeCol.copy(alpha = 0.85f), RoundedCornerShape(50)).padding(horizontal = 5.dp, vertical = 1.dp))
         }
@@ -638,9 +655,9 @@ internal fun PerkRow(vm: RunVm, r: Run, modifier: Modifier, popup: Popup? = null
         for (i in 0 until r.slots) {
             val pk = r.perks.getOrNull(i)
             Box(Modifier.weight(1f)) {
-                if (pk == null) Box(Modifier.fillMaxWidth().height(70.dp).clip(RoundedCornerShape(10.dp)).border(1.5.dp, Cream.copy(alpha = 0.18f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                if (pk == null) Box(Modifier.fillMaxWidth().height(86.dp).clip(RoundedCornerShape(10.dp)).border(1.5.dp, Cream.copy(alpha = 0.18f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
                     Text("Empty", fontSize = 10.sp, color = Cream.copy(alpha = 0.35f))
-                } else PerkCard(pk, i, popup, 70.dp, Modifier.then(if (i in vm.fired) Modifier.graphicsLayer { scaleX = 1.05f; scaleY = 1.05f } else Modifier)) { vm.perkOpen = i }
+                } else PerkCard(pk, i, popup, 86.dp, Modifier.then(if (i in vm.fired) Modifier.graphicsLayer { scaleX = 1.05f; scaleY = 1.05f } else Modifier)) { vm.perkOpen = i }
             }
         }
     }
@@ -751,6 +768,7 @@ private fun ShopCard(vm: RunVm, r: Run, i: Int, o: com.hilotrainer.engine.Offer,
         verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(if (pk.edition == Edition.NONE) pk.rarity.label.uppercase() else "${pk.edition.label.uppercase()} EDITION", fontSize = 8.sp, letterSpacing = 1.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = edge)
+        PerkArt(pk.id, pk.rarity, badgeCol, size = 40.dp)
         Text(pk.name, fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color.White, textAlign = TextAlign.Center, lineHeight = 14.sp, maxLines = 2, modifier = Modifier.heightIn(min = 30.dp))
         Text(badge, fontSize = 10.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color.White, modifier = Modifier.background(badgeCol.copy(alpha = 0.85f), RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 1.dp))
         Text(if (pk.edition == Edition.NONE) pk.desc else "${pk.desc}  ${pk.edition.desc}.", fontSize = 10.sp, lineHeight = 12.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center, maxLines = 7, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).heightIn(min = 70.dp))
@@ -883,7 +901,7 @@ private fun PackSheet(vm: RunVm, r: Run) {
     LaunchedEffect(Unit) { if (animOn) { vm.sfx(Fx.RG_CHIME, 0.9f); flip.animateTo(1f, tween(700)) } }
     Box(Modifier.fillMaxSize().background(Color(0xF2080612)), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 560.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("PERK PACK", fontSize = 26.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold)
+            Text(if (r.phase == RunPhase.SHOP) "PERK PACK" else "PICK A PERK", fontSize = 26.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold)
             Text("Pick 1 of 3", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 pack.forEachIndexed { j, pk ->
@@ -896,8 +914,8 @@ private fun PackSheet(vm: RunVm, r: Run) {
                             .chunky(Brush.verticalGradient(listOf(Color(0xFF2A2650), Color(0xFF16122B))), edge = edge, radius = 12.dp, lift = 4.dp, border = 2.5.dp).clip(RoundedCornerShape(12.dp)).padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        RarityGem(pk.rarity, edge)
                         Text(if (pk.edition == Edition.NONE) pk.rarity.label.uppercase() else "${pk.edition.label.uppercase()} EDITION", fontSize = 8.sp, letterSpacing = 1.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = edge)
+                        PerkArt(pk.id, pk.rarity, badgeOf(pk).second, size = 46.dp)
                         Text(pk.name, fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color.White, textAlign = TextAlign.Center, lineHeight = 14.sp, maxLines = 2, modifier = Modifier.heightIn(min = 30.dp))
                         Text(if (pk.edition == Edition.NONE) pk.desc else "${pk.desc}  ${pk.edition.desc}.", fontSize = 10.sp, lineHeight = 12.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center, maxLines = 8, overflow = TextOverflow.Ellipsis, modifier = Modifier.heightIn(min = 90.dp))
                         ChunkyButton("Take", Color(0xFF2FA866), Modifier.fillMaxWidth(), enabled = ok, small = true) { vm.sfx(Fx.RG_BUY, 1f); vm.mut { pickFromPack(j) } }

@@ -557,7 +557,7 @@ abstract class JustPlayShotBase {
 
     private fun runVm(seed: Int, deck: com.hilotrainer.engine.StartDeck = com.hilotrainer.engine.StartDeck.COUNTER): RunVm {
         val store = CasualStore(null)
-        return RunVm(store, Random(seed)).also { it.start(deck) }
+        return RunVm(store, Random(seed)).also { it.start(deck); it.run?.skipPack(); it.guideOpen = false }
     }
     private fun RunVm.playOutBlind() {
         mut { startBlind() }
@@ -624,6 +624,16 @@ abstract class JustPlayShotBase {
         assertTrue(v.run!!.pack != null)
         shoot("run-pack") { RunScreen(v.store, {}, v) }
     }
+    @Test fun runStarterPick() {
+        val store = CasualStore(null)
+        val v = RunVm(store, Random(14)); v.start(com.hilotrainer.engine.StartDeck.STANDARD); v.guideOpen = false
+        assertTrue(v.run!!.pack != null)
+        shoot("run-starter") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runGuide() {
+        val v = runVm(15); v.guideOpen = true
+        shoot("run-guide") { RunScreen(v.store, {}, v) }
+    }
     @Test fun runHistory() {
         val v = runVm(12)
         v.store.runHistory = "3,7,1240,0,0;6,18,98200,1,1;2,4,310,0,0;4,10,5200,0,2"
@@ -657,7 +667,7 @@ abstract class JustPlayShotBase {
         rule.onNodeWithText("Deal").performClick()
         rule.mainClock.advanceTimeBy(4000)
         rule.waitForIdle()
-        assertTrue(v.run!!.inRound || v.run!!.handsLeft < 5)
+        assertTrue(v.run!!.inRound || v.run!!.handsLeft < 6)
     }
 
     @Test fun menuRemembersTheLastTabAndSettingsAreSearchable() {

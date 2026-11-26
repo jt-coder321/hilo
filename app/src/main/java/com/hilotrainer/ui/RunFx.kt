@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -49,6 +50,12 @@ fun Modifier.chunky(fill: Brush, edge: Color = EdgeInk, radius: Dp = 12.dp, lift
             drawRoundRect(edge, topLeft = Offset(0f, lift.toPx()), size = size, cornerRadius = CornerRadius(radius.toPx()))
         }
         .background(fill, shape)
+        .drawBehind {
+            // Glossy sheen across the top and a soft shade at the bottom, so every sticker looks like a lit, rounded object.
+            val r = CornerRadius(radius.toPx())
+            drawRoundRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.20f), Color.Transparent), endY = size.height * 0.5f), cornerRadius = r)
+            drawRoundRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.22f)), startY = size.height * 0.55f, endY = size.height), cornerRadius = r)
+        }
         .border(border, edge, shape)
 }
 
@@ -77,6 +84,24 @@ fun RunBackdrop(venue: Venue, boss: Boolean, modifier: Modifier = Modifier) {
             drawCircle(Brush.radialGradient(listOf(col.copy(alpha = 0.42f), Color.Transparent), center = Offset(cx, cy), radius = maxOf(w, h) * 0.55f), radius = maxOf(w, h) * 0.55f, center = Offset(cx, cy))
         }
         if (boss) drawRect(Brush.verticalGradient(listOf(Color(0x55B71C1C), Color.Transparent), endY = h * 0.5f))
+        // Light shafts falling from the ceiling lamps, swaying a little.
+        if (fxLevel != 1) for (i in 0..2) {
+            val x0 = w * (0.18f + i * 0.32f) + sin(tau * (t * 2f + i * 0.3f)) * w * 0.03f
+            val beam = androidx.compose.ui.graphics.Path().apply { moveTo(x0 - w * 0.04f, 0f); lineTo(x0 + w * 0.04f, 0f); lineTo(x0 + w * 0.24f, h * 0.9f); lineTo(x0 - w * 0.2f, h * 0.9f); close() }
+            drawPath(beam, Brush.verticalGradient(listOf(venue.print.copy(alpha = 0.10f), Color.Transparent), endY = h * 0.9f))
+        }
+        // Soft bokeh lights and drifting dust.
+        val rnd = Random(11)
+        repeat(if (fxLevel >= 3) 22 else if (fxLevel == 1) 6 else 14) { i ->
+            val bx = (rnd.nextFloat() + t * (0.02f + 0.03f * rnd.nextFloat()) * (if (i % 2 == 0) 1 else -1)).let { v -> ((v % 1f) + 1f) % 1f } * w
+            val by = rnd.nextFloat() * h
+            val br = (6f + rnd.nextFloat() * 18f).dp.toPx()
+            drawCircle(lerp(venue.print, Color.White, 0.3f).copy(alpha = 0.05f + 0.05f * rnd.nextFloat()), br, Offset(bx, by))
+            drawCircle(venue.print.copy(alpha = 0.10f), br, Offset(bx, by), style = Stroke(1.dp.toPx()))
+        }
+        // Film grain.
+        val gr = Random(3)
+        repeat(if (fxLevel == 1) 80 else 220) { drawCircle(Color.White.copy(alpha = 0.035f + 0.03f * gr.nextFloat()), 0.9f, Offset(gr.nextFloat() * w, gr.nextFloat() * h)) }
         // Scan lines.
         val step = 3.dp.toPx()
         var y = 0f

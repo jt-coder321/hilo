@@ -47,13 +47,13 @@ class RunTest {
         val r = Run(StartDeck.STANDARD, Random(5))
         assertEquals(RunPhase.SELECT, r.phase)
         assertTrue(r.startBlind())
-        assertEquals(5, r.handsLeft)
-        assertEquals(100, r.target)
+        assertEquals(6, r.handsLeft)
+        assertEquals(90, r.target)
         var guard = 0
         while (r.phase == RunPhase.PLAY && guard++ < 200) {
             if (!r.inRound) assertTrue(r.deal(2)) else { val a = r.gs.basicAdvice!!.action; if (!r.act(a)) r.act(Action.STAND) }
             assertTrue(r.money >= 0)
-            assertTrue(r.handsLeft in 0..5)
+            assertTrue(r.handsLeft in 0..6)
         }
         assertTrue(r.phase == RunPhase.CLEARED || r.phase == RunPhase.OVER)
         if (r.phase == RunPhase.CLEARED) {
@@ -103,7 +103,7 @@ class RunTest {
     @Test fun skippingPaysAndBossCannotBeSkipped() {
         val r = Run(StartDeck.STANDARD, Random(2))
         val m = r.money
-        assertTrue(r.skipBlind()); assertEquals(m + Run.SKIP_TAG, r.money); assertEquals(1, r.blind)
+        assertTrue(r.skipBlind()); assertTrue(r.money >= m); assertEquals(1, r.blind)
         assertTrue(r.skipBlind()); assertEquals(2, r.blind)
         assertFalse(r.skipBlind())
         assertTrue(r.isBoss)
@@ -233,11 +233,31 @@ class RunTest {
         assertTrue(ch.late)
     }
 
-    @Test fun skippingTrainsARandomHandKind() {
-        val r = Run(StartDeck.STANDARD, Random(6))
-        r.skipBlind()
-        assertEquals(1, HandType.entries.sumOf { r.level(it) })
-        assertEquals(r.level(r.lastTrained!!), 1)
+    @Test fun everySkipRewardDoesWhatItSays() {
+        fun runWith(tag: SkipTag): Run { for (seed in 1..200) { val r = Run(StartDeck.STANDARD, Random(seed)); if (r.skipTag == tag) return r }; error("no seed for $tag") }
+        runWith(SkipTag.TRAIN).let { r -> r.skipBlind(); assertEquals(2, HandType.entries.sumOf { r.level(it) }) }
+        runWith(SkipTag.CASH).let { r -> val m = r.money; r.skipBlind(); assertEquals(m + 8, r.money) }
+        runWith(SkipTag.HANDS).let { r -> r.skipBlind(); assertEquals(2, r.bonusHands) }
+        runWith(SkipTag.PACK).let { r -> r.skipBlind(); assertEquals(3, r.pack!!.size) }
+    }
+
+    @Test fun bonusGoalPaysOnceAndStarterPackOffersThree() {
+        val r = Run(StartDeck.STANDARD, Random(31))
+        r.openStarterPack()
+        assertEquals(3, r.pack!!.size)
+        assertTrue(r.pickFromPack(1)); assertEquals(1, r.perks.size)
+        var paid = false
+        for (seed in 1..40) {
+            val q = Run(StartDeck.STANDARD, Random(seed)); q.startBlind()
+            val g = q.goal ?: continue
+            val m = q.money
+            var guard = 0
+            while (q.phase == RunPhase.PLAY && !q.goalDone && guard++ < 200) {
+                if (!q.inRound) q.deal(2) else { val a = q.gs.basicAdvice?.action ?: Action.STAND; if (!q.act(a)) q.act(Action.STAND) }
+            }
+            if (q.goalDone) { assertTrue(q.money >= m + Run.GOAL_PAY - 20); paid = true; break }
+        }
+        assertTrue(paid)
     }
 
     @Test fun shopAlwaysOffersATrainingCardAndEditionsAreRare() {

@@ -146,6 +146,23 @@ private fun Modifier.venueFelt(v: Venue, boss: Boolean): Modifier = drawBehind {
     if (boss) drawRect(Brush.verticalGradient(listOf(Color(0x44B71C1C), Color.Transparent)), size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.4f))
     val rnd = kotlin.random.Random(7)
     repeat(150) { drawCircle(Color.White.copy(alpha = 0.025f), 1.2f, Offset(rnd.nextFloat() * size.width, rnd.nextFloat() * size.height)) }
+    // Woven cloth: a fine crosshatch over the whole felt.
+    val weave = 4.dp.toPx()
+    var wx = 0f
+    while (wx < size.width + size.height) {
+        drawLine(Color.Black.copy(alpha = 0.06f), Offset(wx, 0f), Offset(wx - size.height, size.height), 1f)
+        drawLine(Color.White.copy(alpha = 0.025f), Offset(wx - size.height, 0f), Offset(wx, size.height), 1f)
+        wx += weave
+    }
+    // A warm lamp pool above the dealer and a big faint emblem in the middle of the cloth.
+    drawRect(Brush.radialGradient(listOf(Color(0x33FFE9B0), Color.Transparent), center = Offset(size.width / 2, size.height * 0.18f), radius = size.width * 0.55f))
+    val emblem = Offset(size.width / 2, size.height * 0.72f)
+    drawCircle(v.print.copy(alpha = 0.07f), size.width * 0.2f, emblem, style = Stroke(2.dp.toPx()))
+    drawCircle(v.print.copy(alpha = 0.05f), size.width * 0.15f, emblem, style = Stroke(1.dp.toPx()))
+    // Gold inlay running around the edge of the felt.
+    val inset = 5.dp.toPx()
+    drawRoundRect(v.print.copy(alpha = 0.35f), Offset(inset, inset), androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2), androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()), style = Stroke(1.2.dp.toPx()))
+    drawRoundRect(v.print.copy(alpha = 0.16f), Offset(inset + 4.dp.toPx(), inset + 4.dp.toPx()), androidx.compose.ui.geometry.Size(size.width - inset * 2 - 8.dp.toPx(), size.height - inset * 2 - 8.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()), style = Stroke(1.dp.toPx()))
     printSmile("BLACKJACK PAYS 3 TO 2", size.height * 0.47f, size.height * 0.04f, v.print)
     printSmile("DEALER STANDS ON 17", size.height * 0.535f, size.height * 0.04f, v.print)
     // The betting arc in front of the player.

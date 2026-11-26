@@ -9,7 +9,9 @@ class RunSimTest {
         val rnd = Random(seed)
         val r = Run(deck, rnd)
         var guard = 0
+        r.openStarterPack()
         while (r.phase != RunPhase.OVER && r.phase != RunPhase.WON && guard++ < 20000) {
+            if (r.pack != null) { if (!r.pickFromPack(0)) r.skipPack() }
             when (r.phase) {
                 RunPhase.SELECT -> r.startBlind()
                 RunPhase.PLAY -> {

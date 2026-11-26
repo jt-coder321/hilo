@@ -97,154 +97,154 @@ object Perks {
     private fun late(id: String, name: String, r: Rarity, cost: Int, desc: String, effect: Perk.(HandCtx, Fx) -> Unit) = Perk(id, name, r, cost, desc, effect = effect, late = true)
 
     val ALL: List<Perk> = listOf(
-        p("sevens", "Lucky Sevens", Rarity.COMMON, 4, "Winning hands score +50 chips for each 7 in them.") { c, f ->
+        p("sevens", "Lucky Sevens", Rarity.COMMON, 4, "Each 7 in a winning hand: +50 chips.") { c, f ->
             val n = c.cards.count { it.rank == Rank.SEVEN }; if (c.won && n > 0) f.hit(name, "+${50 * n} chips", chips = 50 * n)
         },
-        p("court", "Royal Court", Rarity.COMMON, 4, "Winning hands score +30 chips for each face card in them.") { c, f ->
+        p("court", "Royal Court", Rarity.COMMON, 4, "Each face card (J, Q, K) in a winning hand: +30 chips.") { c, f ->
             val n = c.cards.count { it.rank in listOf(Rank.JACK, Rank.QUEEN, Rank.KING) }; if (c.won && n > 0) f.hit(name, "+${30 * n} chips", chips = 30 * n)
         },
-        p("ace", "Ace in the Hole", Rarity.COMMON, 5, "Winning hands that hold an Ace score +3 mult.") { c, f ->
+        p("ace", "Ace in the Hole", Rarity.COMMON, 5, "+3 mult when you win with an Ace in your hand.") { c, f ->
             if (c.won && c.cards.any { it.rank.isAce }) f.hit(name, "+3 mult", mult = 3.0)
         },
-        p("tell", "Dealer's Tell", Rarity.COMMON, 4, "+100 chips when you win because the dealer busts.") { c, f ->
+        p("tell", "Dealer's Tell", Rarity.COMMON, 4, "+100 chips when you win because the dealer busted (went over 21).") { c, f ->
             if (c.won && c.dealerBust) f.hit(name, "+100 chips", chips = 100)
         },
-        p("soft", "Soft Touch", Rarity.COMMON, 5, "Winning soft hands (counting an Ace as 11) score +4 mult.") { c, f ->
+        p("soft", "Soft Touch", Rarity.COMMON, 5, "+4 mult when you win with an Ace counted as 11, like Ace + 6.") { c, f ->
             if (c.won && c.soft) f.hit(name, "+4 mult", mult = 4.0)
         },
-        p("twenty", "Twenty", Rarity.COMMON, 5, "Winning with exactly 20 scores +4 mult.") { c, f ->
+        p("twenty", "Twenty", Rarity.COMMON, 5, "+4 mult when you win with a total of exactly 20.") { c, f ->
             if (c.won && c.total == 20) f.hit(name, "+4 mult", mult = 4.0)
         },
-        p("penny", "Penny Saver", Rarity.COMMON, 4, "Earn $1 for every winning hand.") { c, f ->
+        p("penny", "Penny Saver", Rarity.COMMON, 4, "Earn \$1 every time you win a hand.") { c, f ->
             if (c.won) f.hit(name, "+\$1", money = 1)
         },
-        Perk("cut", "Cut Card", Rarity.COMMON, 6, "+1 hand in every blind.", handsBonus = 1),
-        Perk("spotter", "Spotter", Rarity.COMMON, 5, "Shows the Hi-Lo running count on the table.", showsCount = true),
-        p("sharp", "Card Sharp", Rarity.UNCOMMON, 7, "Winning hands dealt at a true count of +2 or more score x2 mult.") { c, f ->
+        Perk("cut", "Cut Card", Rarity.COMMON, 6, "+1 hand every blind. More hands means more chances to score.", handsBonus = 1),
+        Perk("spotter", "Spotter", Rarity.COMMON, 5, "Shows the running count on the table (the Hi-Lo card counting number).", showsCount = true),
+        p("sharp", "Card Sharp", Rarity.UNCOMMON, 7, "x2 mult on a win when the count is high (+2 or more). That means lots of 10s and Aces are left in the deck.") { c, f ->
             if (c.won && c.trueCount >= 2.0) f.hit(name, "x2 mult (count +2)", x = 2.0)
         },
-        p("contrarian", "Contrarian", Rarity.UNCOMMON, 6, "Winning hands dealt at a true count of -1 or less score +6 mult.") { c, f ->
+        p("contrarian", "Contrarian", Rarity.UNCOMMON, 6, "+6 mult on a win when the count is low (-1 or less). That means lots of small cards are left.") { c, f ->
             if (c.won && c.trueCount <= -1.0) f.hit(name, "+6 mult (cold shoe)", mult = 6.0)
         },
-        p("trouble", "Double Trouble", Rarity.UNCOMMON, 7, "Doubled wins score x2 mult.") { c, f ->
+        p("trouble", "Double Trouble", Rarity.UNCOMMON, 7, "x2 mult when you win a hand you doubled down.") { c, f ->
             if (c.won && c.doubled) f.hit(name, "x2 mult", x = 2.0)
         },
-        p("splitter", "Splitter", Rarity.UNCOMMON, 6, "Each winning split hand scores +80 chips and +3 mult.") { c, f ->
+        p("splitter", "Splitter", Rarity.UNCOMMON, 6, "+80 chips and +3 mult for each winning hand you got by splitting a pair.") { c, f ->
             if (c.won && c.split) f.hit(name, "+80 chips +3 mult", chips = 80, mult = 3.0)
         },
-        p("minimal", "Minimalist", Rarity.UNCOMMON, 6, "Winning with exactly two cards (not a blackjack) scores +6 mult.") { c, f ->
+        p("minimal", "Minimalist", Rarity.UNCOMMON, 6, "+6 mult when you win using just your first two cards (not a blackjack).") { c, f ->
             if (c.won && !c.blackjack && c.cards.size == 2 && !c.split) f.hit(name, "+6 mult", mult = 6.0)
         },
-        p("roller", "High Roller", Rarity.UNCOMMON, 7, "Wins at stake 3 score x1.5 mult.") { c, f ->
+        p("roller", "High Roller", Rarity.UNCOMMON, 7, "x1.5 mult when you win at Stake 3, the biggest bet.") { c, f ->
             if (c.won && c.stake == 3) f.hit(name, "x1.5 mult", x = 1.5)
         },
-        Perk("banker", "Banker", Rarity.UNCOMMON, 6, "Interest pays up to \$5 more at the end of a blind.", interestBonus = 5),
-        Perk("combo", "Combo King", Rarity.UNCOMMON, 7, "Win streak bonuses are doubled.", comboBonus = true),
-        p("charlie", "Charlie", Rarity.RARE, 9, "Winning with five or more cards scores x4 mult.") { c, f ->
+        Perk("banker", "Banker", Rarity.UNCOMMON, 6, "Interest at the end of a blind can go up by \$5 more. Interest is \$1 for every \$5 you hold.", interestBonus = 5),
+        Perk("combo", "Combo King", Rarity.UNCOMMON, 7, "Win streak bonuses are twice as big. A streak bonus is extra mult for winning hands in a row.", comboBonus = true),
+        p("charlie", "Charlie", Rarity.RARE, 9, "x4 mult when you win with 5 or more cards in your hand.") { c, f ->
             if (c.won && c.cards.size >= 5) f.hit(name, "x4 mult", x = 4.0)
         },
-        p("sore", "Sore Loser", Rarity.RARE, 8, "Winning hands score +2 mult for each hand you lost this blind.") { c, f ->
+        p("sore", "Sore Loser", Rarity.RARE, 8, "+2 mult on a win for every hand you already lost this blind. Losing makes your next win bigger.") { c, f ->
             if (c.won && c.lossesThisBlind > 0) f.hit(name, "+${2 * c.lossesThisBlind} mult", mult = 2.0 * c.lossesThisBlind)
         },
-        p("wild", "Wild Card", Rarity.RARE, 10, "Every winning hand scores x2 mult.") { c, f ->
+        p("wild", "Wild Card", Rarity.RARE, 10, "x2 mult on every win. Simple and strong.") { c, f ->
             if (c.won) f.hit(name, "x2 mult", x = 2.0)
         },
-        p("baron", "Blackjack Baron", Rarity.RARE, 9, "Blackjacks score x3 mult.") { c, f ->
+        p("baron", "Blackjack Baron", Rarity.RARE, 9, "x3 mult on a blackjack (an Ace and a 10 as your first two cards).") { c, f ->
             if (c.blackjack) f.hit(name, "x3 mult", x = 3.0)
         },
         Perk("ticket", "Golden Ticket", Rarity.RARE, 8, "Earn \$3 every time you clear a blind.", clearMoney = 3),
-        Perk("net", "Safety Net", Rarity.RARE, 8, "The first lost hand of each blind does not use up a hand.", saveFirstLoss = true),
-        p("echo", "Echo", Rarity.RARE, 8, "Wins over a busted dealer score x1.5 mult.") { c, f ->
+        Perk("net", "Safety Net", Rarity.RARE, 8, "Your first lost hand each blind does not use up a hand. A free retry.", saveFirstLoss = true),
+        p("echo", "Echo", Rarity.RARE, 8, "x1.5 mult when you win because the dealer busted.") { c, f ->
             if (c.won && c.dealerBust) f.hit(name, "x1.5 mult", x = 1.5)
         },
-        p("bustbuster", "Bust Buster", Rarity.COMMON, 5, "Wins over a busted dealer score +4 mult.") { c, f ->
+        p("bustbuster", "Bust Buster", Rarity.COMMON, 5, "+4 mult when you win because the dealer busted.") { c, f ->
             if (c.won && c.dealerBust) f.hit(name, "+4 mult", mult = 4.0)
         },
-        p("collector", "Chip Collector", Rarity.COMMON, 5, "Winning hands score +12 chips for every perk you hold.") { c, f ->
+        p("collector", "Chip Collector", Rarity.COMMON, 5, "+12 chips on a win for each perk you own (it counts itself).") { c, f ->
             if (c.won && c.perkCount > 0) f.hit(name, "+${12 * c.perkCount} chips", chips = 12 * c.perkCount)
         },
-        p("natural", "Natural", Rarity.COMMON, 5, "Blackjacks score +120 chips.") { c, f ->
+        p("natural", "Natural", Rarity.COMMON, 5, "+120 chips on a blackjack.") { c, f ->
             if (c.blackjack) f.hit(name, "+120 chips", chips = 120)
         },
-        Perk("consol", "Consolation", Rarity.COMMON, 5, "Earn \$2 whenever you lose a hand."),
-        p("hot", "Hot Hand", Rarity.UNCOMMON, 6, "Wins score +1 mult for every win in your current streak.") { c, f ->
+        Perk("consol", "Consolation", Rarity.COMMON, 5, "Earn \$2 every time you lose a hand."),
+        p("hot", "Hot Hand", Rarity.UNCOMMON, 6, "+1 mult on a win for each win you have in a row. A 4 win streak gives +4.") { c, f ->
             if (c.won && c.winStreak > 0) f.hit(name, "+${c.winStreak} mult", mult = c.winStreak.toDouble())
         },
-        p("heavy", "Light Touch", Rarity.UNCOMMON, 6, "Wins at stake 1 score +8 mult.") { c, f ->
+        p("heavy", "Light Touch", Rarity.UNCOMMON, 6, "+8 mult when you win at Stake 1, the smallest bet. Safe and strong.") { c, f ->
             if (c.won && c.stake == 1) f.hit(name, "+8 mult", mult = 8.0)
         },
-        p("snow", "Snowball", Rarity.UNCOMMON, 7, "Wins score +2 mult. Grows by +1 mult every time you clear a blind.") { c, f ->
+        p("snow", "Snowball", Rarity.UNCOMMON, 7, "+2 mult on every win. Grows by +1 mult each time you clear a blind.") { c, f ->
             if (c.won) f.hit(name, "+${2 + grow} mult", mult = 2.0 + grow)
         },
-        p("fat", "Fat Stack", Rarity.UNCOMMON, 6, "Winning hands score +1 mult for every \$10 you hold.") { c, f ->
+        p("fat", "Fat Stack", Rarity.UNCOMMON, 6, "+1 mult on a win for every \$10 you are holding.") { c, f ->
             if (c.won && c.money >= 10) f.hit(name, "+${c.money / 10} mult", mult = (c.money / 10).toDouble())
         },
-        late("chain", "Chain Reaction", Rarity.UNCOMMON, 7, "Wins score +3 mult for every other perk that fired on the hand.") { c, f ->
+        late("chain", "Chain Reaction", Rarity.UNCOMMON, 7, "+3 mult on a win for each other perk that also scored on that hand.") { c, f ->
             val n = f.notes.map { it.perk }.distinct().size
             if (c.won && n > 0) f.hit(name, "+${3 * n} mult ($n fired)", mult = 3.0 * n)
         },
-        Perk("scholar", "Scholar", Rarity.UNCOMMON, 7, "Every hand level you train is worth double."),
-        Perk("copy", "Copycat", Rarity.RARE, 10, "Copies the perk to its right."),
-        p("lowball", "Lowball", Rarity.COMMON, 4, "Wins with a total of 17 or less score +60 chips.") { c, f ->
+        Perk("scholar", "Scholar", Rarity.UNCOMMON, 7, "Hand training is worth double. Every training level gives twice the chips and mult."),
+        Perk("copy", "Copycat", Rarity.RARE, 10, "Copies the perk right next to it on its right. Move your perks around to choose what it copies."),
+        p("lowball", "Lowball", Rarity.COMMON, 4, "+60 chips when you win with a total of 17 or less.") { c, f ->
             if (c.won && !c.blackjack && c.total <= 17) f.hit(name, "+60 chips", chips = 60)
         },
-        p("tenstack", "Ten Stack", Rarity.COMMON, 5, "Winning hands score +20 chips for each ten, jack, queen or king in them.") { c, f ->
+        p("tenstack", "Ten Stack", Rarity.COMMON, 5, "+20 chips for each 10, J, Q or K in a winning hand.") { c, f ->
             val n = c.cards.count { it.rank.value == 10 }; if (c.won && n > 0) f.hit(name, "+${20 * n} chips", chips = 20 * n)
         },
-        p("acehigh", "Ace High", Rarity.COMMON, 5, "Winning hands score +40 chips for each Ace in them.") { c, f ->
+        p("acehigh", "Ace High", Rarity.COMMON, 5, "+40 chips for each Ace in a winning hand.") { c, f ->
             val n = c.cards.count { it.rank.isAce }; if (c.won && n > 0) f.hit(name, "+${40 * n} chips", chips = 40 * n)
         },
-        p("rainbow", "Rainbow", Rarity.COMMON, 5, "Winning hands with three or more different suits score +4 mult.") { c, f ->
+        p("rainbow", "Rainbow", Rarity.COMMON, 5, "+4 mult when you win with cards from 3 or more different suits.") { c, f ->
             if (c.won && c.cards.map { it.suit }.distinct().size >= 3) f.hit(name, "+4 mult", mult = 4.0)
         },
-        p("flush", "Flush", Rarity.UNCOMMON, 6, "Winning hands of three or more cards in one suit score x2 mult.") { c, f ->
+        p("flush", "Flush", Rarity.UNCOMMON, 6, "x2 mult when you win with 3 or more cards that are all the same suit.") { c, f ->
             if (c.won && c.cards.size >= 3 && c.cards.map { it.suit }.distinct().size == 1) f.hit(name, "x2 mult (flush)", x = 2.0)
         },
-        p("pairup", "Pair Up", Rarity.COMMON, 5, "Winning hands that start with a pair score +5 mult.") { c, f ->
+        p("pairup", "Pair Up", Rarity.COMMON, 5, "+5 mult when you win with a hand that started as a pair.") { c, f ->
             if (c.won && c.cards.size >= 2 && c.cards[0].rank == c.cards[1].rank) f.hit(name, "+5 mult", mult = 5.0)
         },
-        p("lastcall", "Last Call", Rarity.UNCOMMON, 6, "Wins on the last hand of a blind score x2 mult.") { c, f ->
+        p("lastcall", "Last Call", Rarity.UNCOMMON, 6, "x2 mult when you win on the last hand of a blind.") { c, f ->
             if (c.won && c.handsLeft == 0) f.hit(name, "x2 mult (last hand)", x = 2.0)
         },
-        p("opener", "Opening Bet", Rarity.COMMON, 5, "Wins on the first hand of a blind score +80 chips.") { c, f ->
+        p("opener", "Opening Bet", Rarity.COMMON, 5, "+80 chips when you win on the first hand of a blind.") { c, f ->
             if (c.won && c.firstHand) f.hit(name, "+80 chips", chips = 80)
         },
-        p("comeback", "Comeback", Rarity.UNCOMMON, 7, "Wins score +1 mult for every 100 chips you are still short of the target.") { c, f ->
+        p("comeback", "Comeback", Rarity.UNCOMMON, 7, "+1 mult on a win for every 100 points you are still short of the goal, up to +15. Big when you are behind.") { c, f ->
             val n = (c.short / 100).coerceAtMost(15); if (c.won && n > 0) f.hit(name, "+$n mult", mult = n.toDouble())
         },
-        p("overkill", "Twenty-One Club", Rarity.UNCOMMON, 6, "Wins with exactly 21 score +8 mult.") { c, f ->
+        p("overkill", "Twenty-One Club", Rarity.UNCOMMON, 6, "+8 mult when you win with exactly 21.") { c, f ->
             if (c.won && c.total == 21) f.hit(name, "+8 mult", mult = 8.0)
         },
-        p("bossbane", "Boss Bane", Rarity.UNCOMMON, 7, "Wins in a boss blind score x2 mult.") { c, f ->
+        p("bossbane", "Boss Bane", Rarity.UNCOMMON, 7, "x2 mult on wins during a boss blind.") { c, f ->
             if (c.won && c.boss) f.hit(name, "x2 mult (boss)", x = 2.0)
         },
-        p("allin", "All In", Rarity.RARE, 9, "Wins at stake 3 score +100 chips for every ante you have reached.") { c, f ->
+        p("allin", "All In", Rarity.RARE, 9, "When you win at Stake 3: +100 chips for each round (ante) you have reached.") { c, f ->
             if (c.won && c.stake == 3) f.hit(name, "+${100 * c.ante} chips", chips = 100 * c.ante)
         },
-        p("veteran", "Veteran", Rarity.UNCOMMON, 6, "Wins score +2 mult for every ante you have reached.") { c, f ->
+        p("veteran", "Veteran", Rarity.UNCOMMON, 6, "+2 mult on every win for each round (ante) you have reached.") { c, f ->
             if (c.won) f.hit(name, "+${2 * c.ante} mult", mult = 2.0 * c.ante)
         },
-        p("tipjar", "Tip Jar", Rarity.COMMON, 4, "Earn \$2 whenever you win with a blackjack.") { c, f ->
+        p("tipjar", "Tip Jar", Rarity.COMMON, 4, "Earn \$2 every time you get a blackjack.") { c, f ->
             if (c.blackjack) f.hit(name, "+\$2", money = 2)
         },
-        p("parlay", "Parlay", Rarity.UNCOMMON, 6, "Earn \$1 for every win in a streak after the first.") { c, f ->
+        p("parlay", "Parlay", Rarity.UNCOMMON, 6, "Earn money for winning in a row: your 2nd win pays \$1, the 3rd pays \$2, and so on.") { c, f ->
             if (c.won && c.winStreak > 1) f.hit(name, "+\$${c.winStreak - 1}", money = c.winStreak - 1)
         },
         Perk("payday", "Payday", Rarity.UNCOMMON, 8, "Earn \$4 every time you clear a blind.", clearMoney = 4),
-        Perk("pockets", "Deep Pockets", Rarity.RARE, 12, "+2 hands in every blind.", handsBonus = 2),
-        p("gambler", "Gambler's Rush", Rarity.RARE, 9, "Wins score x1.5 mult, but every lost hand costs \$1 more.") { c, f ->
+        Perk("pockets", "Deep Pockets", Rarity.RARE, 12, "+2 hands every blind.", handsBonus = 2),
+        p("gambler", "Gambler's Rush", Rarity.RARE, 9, "x1.5 mult on every win, but each lost hand costs you \$1 more.") { c, f ->
             if (c.won) f.hit(name, "x1.5 mult", x = 1.5)
         },
-        Perk("insure", "Insurance Man", Rarity.UNCOMMON, 6, "Lost hands cost \$1 less, never below \$0."),
-        Perk("trainer", "Personal Trainer", Rarity.RARE, 10, "Every blind you clear trains a random hand type one level."),
-        p("grinder", "Grinder", Rarity.UNCOMMON, 6, "Wins score +1 mult for every blind you have cleared this run, up to +10.") { c, f ->
+        Perk("insure", "Insurance Man", Rarity.UNCOMMON, 6, "Lost hands cost you \$1 less (never below \$0)."),
+        Perk("trainer", "Personal Trainer", Rarity.RARE, 10, "Every blind you clear trains a random hand type one level, for free."),
+        p("grinder", "Grinder", Rarity.UNCOMMON, 6, "+1 mult on a win for each blind you have cleared this run, up to +10.") { c, f ->
             val n = c.cleared.coerceAtMost(10); if (c.won && n > 0) f.hit(name, "+$n mult", mult = n.toDouble())
         },
-        p("sharpshooter", "Sharpshooter", Rarity.RARE, 9, "Wins at a true count of +1 or more score +25 chips per true count point, up to 5.") { c, f ->
+        p("sharpshooter", "Sharpshooter", Rarity.RARE, 9, "When the count is positive, wins get +25 chips for each point of count, up to 5 points.") { c, f ->
             val n = c.trueCount.toInt().coerceAtMost(5); if (c.won && n >= 1) f.hit(name, "+${25 * n} chips", chips = 25 * n)
         },
-        Perk("ghost", "Ghost Hand", Rarity.RARE, 9, "A lost hand has a 1 in 4 chance not to use up a hand."),
-        p("bettor", "Heavy Bettor", Rarity.RARE, 9, "Doubled wins score x3 mult.") { c, f ->
+        Perk("ghost", "Ghost Hand", Rarity.RARE, 9, "When you lose a hand there is a 1 in 4 chance it does not use up a hand."),
+        p("bettor", "Heavy Bettor", Rarity.RARE, 9, "x3 mult when you win a hand you doubled down.") { c, f ->
             if (c.won && c.doubled) f.hit(name, "x3 mult", x = 3.0)
         },
     )
@@ -292,6 +292,23 @@ enum class StartDeck(val label: String, val desc: String, val money: Int, val ha
     ROLLER("High Roller Deck", "\$10, only 4 hands a blind, and the High Roller perk. Clear Ante 3 once to unlock.", 10, 4, "roller", 3),
 }
 
+/** What you get for skipping a blind. One is rolled for each skippable blind, so skipping is a real choice. */
+enum class SkipTag(val label: String, val desc: String) {
+    PACK("Free Perk Pack", "Skip this blind and pick 1 of 3 perks for free."),
+    CASH("\$8", "Skip this blind and take \$8 right now."),
+    TRAIN("Train 2 hands", "Skip this blind and level up two random hand types."),
+    HANDS("+2 hands", "Skip this blind and get 2 extra hands in the next blind."),
+}
+
+/** A side goal for each blind. Finish it for cash on the spot. */
+enum class BlindGoal(val label: String) {
+    DOUBLE("Win a hand you doubled down"),
+    BUST("Win when the dealer busts"),
+    STREAK("Win 3 hands in a row"),
+    HIGH("Win with a total of 20 or 21"),
+    BIG("Score one hand worth 40% of the goal"),
+}
+
 data class ScoreEvent(
     val key: Int, val outcome: Outcome, val baseChips: Int, val chips: Int, val mult: Double, val total: Int, val money: Int,
     val triggers: List<Trigger>, val note: String,
@@ -305,11 +322,12 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         const val MAX_ANTE = 6
         const val SLOTS = 5
         const val UNIT = 10
-        val BASE = intArrayOf(100, 250, 550, 1150, 2400, 5000)
+        val BASE = intArrayOf(90, 220, 480, 1000, 2100, 4400)
         val BLIND_MUL = doubleArrayOf(1.0, 1.5, 2.0)
         val BLIND_NAMES = listOf("Small Blind", "Big Blind", "Boss Blind")
         val REWARD = intArrayOf(3, 4, 5)
         const val SKIP_TAG = 4
+        const val GOAL_PAY = 4
         val RULES = Rules(decks = 6, dealerHitsSoft17 = false, doubleAfterSplit = true, surrenderAllowed = false, maxHands = 4, penetration = 0.75)
     }
 
@@ -354,6 +372,11 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     var blindsCleared = 0; private set
     var bestHand = 0; private set
     var skips = 0; private set
+    var skipTag: SkipTag = SkipTag.CASH; private set
+    var goal: BlindGoal? = null; private set
+    var goalDone = false; private set
+    /** Changes each time the goal is finished, so the screen can celebrate once. */
+    var goalKey = 0; private set
     var cause = ""; private set
     /** The best hand of the run, kept for the replay at the end. */
     var bestCards: List<Card> = emptyList(); private set
@@ -363,6 +386,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
 
     init {
         deck.perk?.let { id -> Perks.fresh(id)?.let { perks += it } }
+        rollSkipTag()
     }
 
     val gs: GameState get() = game.state()
@@ -391,18 +415,26 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         if (phase != RunPhase.SELECT) return false
         handsMax = when {
             activeBoss?.onlyHands ?: 0 > 0 -> activeBoss!!.onlyHands
-            else -> deck.hands + perks.sumOf { it.handsBonus } + bonusHands + (activeBoss?.handsDelta ?: 0)
+            else -> deck.hands + perks.sumOf { it.handsBonus } + bonusHands + (activeBoss?.handsDelta ?: 0) + (if (ante == 1) 1 else 0)
         }
         handsLeft = handsMax; score = 0; winStreak = 0; losses = 0; lastStake = 0; netUsed = false
+        goal = if (handsMax <= 1) null else BlindGoal.entries[rnd.nextInt(BlindGoal.entries.size)]; goalDone = false
         lastScore = emptyList(); cashout = null; phase = RunPhase.PLAY
         return true
     }
 
     fun skipBlind(): Boolean {
         if (phase != RunPhase.SELECT || isBoss) return false
-        money += SKIP_TAG; skips++
-        HandType.entries[rnd.nextInt(HandType.entries.size)].let { levels[it.ordinal]++; lastTrained = it }
+        skips++
+        val tag = skipTag
+        when (tag) {
+            SkipTag.CASH -> money += 8
+            SkipTag.TRAIN -> repeat(2) { HandType.entries[rnd.nextInt(HandType.entries.size)].let { levels[it.ordinal]++; lastTrained = it } }
+            else -> {}
+        }
         nextBlind()
+        if (tag == SkipTag.HANDS) bonusHands = 2
+        if (tag == SkipTag.PACK) pack = rollPack()
         return true
     }
 
@@ -413,7 +445,13 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
             ante++; blind = 0; boss = Bosses.ALL[rnd.nextInt(Bosses.ALL.size)]
         } else blind++
         phase = RunPhase.SELECT
+        rollSkipTag()
     }
+
+    private fun rollSkipTag() { skipTag = SkipTag.entries[rnd.nextInt(SkipTag.entries.size)] }
+
+    /** The first pick of a run: three perks, take one. */
+    fun openStarterPack() { if (pack == null && perks.size < slots) pack = rollPack() }
 
     fun canDeal(s: Int): Boolean = phase == RunPhase.PLAY && !inRound && handsLeft > 0 && s in 1..3 && !(activeBoss?.noRepeatStake == true && s == lastStake)
 
@@ -490,6 +528,16 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
                     val mult = (bm + fx.mult) * fx.xmult
                     val total2 = (chips * mult).roundToInt()
                     score += total2
+                    if (!goalDone) goal?.let { g ->
+                        val hit = when (g) {
+                            BlindGoal.DOUBLE -> h.doubled
+                            BlindGoal.BUST -> dBust
+                            BlindGoal.STREAK -> winStreak >= 3
+                            BlindGoal.HIGH -> total >= 20
+                            BlindGoal.BIG -> total2 * 10 >= target * 4
+                        }
+                        if (hit) { goalDone = true; goalKey = evKey + 1; money += GOAL_PAY }
+                    }
                     if (total2 > bestHand) { bestHand = total2; bestCards = h.cards; bestType = type; bestChips = chips; bestMult = mult }
                     money += fx.money
                     out += ScoreEvent(++evKey, r.outcome, base, chips, mult, total2, fx.money, fx.notes.toList(), "", type, level(type), bm)
@@ -516,7 +564,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         lines += "$blindName cleared" to reward
         if (handsLeft > 0) lines += "$handsLeft unused ${if (handsLeft == 1) "hand" else "hands"}" to handsLeft
         val interest = minOf(money / 5, interestCap)
-        if (interest > 0) lines += "Interest on \$$money" to interest
+        if (interest > 0) lines += "Interest (\$1 per \$5 you hold)" to interest
         val tick = perks.sumOf { it.clearMoney }
         if (tick > 0) lines += "Golden Ticket" to tick
         perks.filter { it.id == "snow" }.forEach { it.grow++ }
@@ -649,6 +697,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         ante = a.coerceIn(1, MAX_ANTE); blind = b.coerceIn(0, 2); money = m.coerceAtLeast(0); bonusHands = bh; countNotes = cn
         blindsCleared = cleared; bestHand = best; skips = sk
         phase = RunPhase.SELECT
+        rollSkipTag()
         if (shop) { phase = RunPhase.SHOP; rerollCost = 2; roll() }
     }
 
