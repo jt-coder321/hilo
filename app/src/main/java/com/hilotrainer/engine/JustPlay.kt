@@ -148,6 +148,90 @@ object Cast {
             listOf("Let's go, I'm feeling it tonight.", "Okay, okay. Fresh start."),
             listOf("Rigged. This whole place is rigged.", "I'm up, I'm leaving. Never happens!"),
         ),
+        CastMember(
+            "Priya", Archetype.CAUTIOUS, BotStyle.BASIC,
+            Look(SKIN3, 0xFF1B1B1B, Hair.BUN, 0xFF00838F, 0xFFE0F7FA, extras = listOf(Extra.LANYARD)),
+            8, 20, 2, 35, 15, 35, "Night shift nurse on her break. Calm and dry, plays the book and never rattles.",
+            listOf("Forty minutes on my break. Deal me in.", "Quiet table. Good."),
+            listOf("Break's over. Back to the ward.", "Pager's going off. See you all."),
+        ),
+        CastMember(
+            "Gus", Archetype.REGULAR, BotStyle.NEVER_BUST,
+            Look(SKIN2, 0xFFCFCFCF, Hair.BALD, 0xFF1565C0, 0xFFFFFFFF, Hat.CAP, 0xFF0D47A1, listOf(Extra.GLASSES)),
+            15, 40, 3, 75, 20, 50, "Retired mail carrier. A dad joke for every hand and a bad habit of never busting.",
+            listOf("Special delivery! Got room for a mailman?", "Gus is here, and so are the jokes."),
+            listOf("Time to make my last delivery. Home.", "That's the end of my route. Night, all."),
+        ),
+        CastMember(
+            "Kenji", Archetype.PRO, BotStyle.BASIC,
+            Look(SKIN1, 0xFF151515, Hair.SHORT, 0xFF455A64, 0xFFB0BEC5, extras = listOf(Extra.GLASSES, Extra.HEADPHONES)),
+            30, 70, 2, 55, 25, 55, "Software engineer. Plays perfect strategy and cannot stop explaining the odds.",
+            listOf("Evening. I brought a strategy chart.", "Mind if I run a little experiment here?"),
+            listOf("Sample size reached. Thanks, all.", "That's enough data for one night."),
+        ),
+        CastMember(
+            "Delilah", Archetype.PARTY, BotStyle.MIMIC,
+            Look(SKIN4, 0xFF1A0F0A, Hair.CURLY, 0xFFC2185B, 0xFFFFD54F, Hat.NONE, 0xFF333333, listOf(Extra.PEARLS)),
+            8, 20, 2, 70, 8, 22, "Lounge singer between sets. Dramatic, warm, and she treats every hand like a performance.",
+            listOf("Hello, darlings! I have forty minutes.", "Make room for the entertainment!"),
+            listOf("I'm on in ten, loves. Be good!", "That's my cue, darlings. Goodnight!"),
+        ),
+        CastMember(
+            "Bruno", Archetype.REGULAR, BotStyle.BASIC,
+            Look(SKIN3, 0xFF111111, Hair.BUZZ, 0xFF212121, 0xFFFFFFFF, extras = listOf(Extra.BEARD)),
+            20, 45, 3, 40, 15, 40, "Off duty bouncer, soft inside and a bad loser. Plays by the book and sulks when it goes wrong.",
+            listOf("Evening. Nobody's causing trouble, right?", "Mind if I sit? My feet are sore."),
+            listOf("Back to the door. Good night.", "That's enough. Don't want to get grumpy."),
+        ),
+        CastMember(
+            "Fiona", Archetype.HUNCH, BotStyle.HUNCH,
+            Look(SKIN1, 0xFFB5651D, Hair.LONG, 0xFF2E7D32, 0xFFFFF59D, extras = listOf(Extra.SCARF, Extra.PEARLS)),
+            10, 30, 2, 65, 12, 30, "Pub owner from County Clare. Lucky charms for everything and a hunch for every hand.",
+            listOf("Top of the evening to ye all!", "Rubbed me lucky penny, so we're grand."),
+            listOf("The pub won't run itself. Away I go!", "Luck's gone home. I'll follow."),
+        ),
+        CastMember(
+            "Omar", Archetype.REGULAR, BotStyle.BASIC,
+            Look(SKIN4, 0xFF262626, Hair.SHORT, 0xFF455A64, 0xFFFFC107, Hat.CAP, 0xFF212121, listOf(Extra.MUSTACHE)),
+            15, 35, 2, 60, 20, 50, "Taxi driver on his night off. Storyteller, easy company, plays steady.",
+            listOf("Evening, folks. Off the clock, finally.", "Anyone need a ride? I'm kidding. Deal me in."),
+            listOf("The cab's waiting. Drive safe, everyone.", "That's the end of my shift, for real."),
+        ),
+        CastMember(
+            "Chloe", Archetype.TOURIST, BotStyle.MIMIC,
+            Look(SKIN2, 0xFFF4C27A, Hair.PONYTAIL, 0xFFFFFFFF, 0xFFFF80AB, Hat.VISOR, 0xFFFFFFFF, listOf(Extra.SUNGLASSES)),
+            8, 20, 2, 70, 8, 22, "Influencer filming a casino vlog. Narrates every hand and plays like the dealer.",
+            listOf("Hi guys! We're at the blackjack table!", "Okay, quick selfie, then I'll play."),
+            listOf("That's a wrap, guys. Link in my bio!", "Battery's dead. So is my bankroll. Bye!"),
+        ),
+        CastMember(
+            "Reggie", Archetype.TILTER, BotStyle.AGGRESSIVE,
+            Look(SKIN5, 0xFF0D0D0D, Hair.BUZZ, 0xFF283593, 0xFFFFD600, extras = listOf(Extra.GOLD_CHAIN)),
+            25, 60, 4, 55, 12, 35, "Retired pro athlete and a terrible loser. Competitive, loud, and chases losses.",
+            listOf("Reggie's in the house. Save me a seat.", "Who's hot? I'm about to be."),
+            listOf("This table is rigged. Complaint filed.", "I'm out. The refs were bad."),
+        ),
+        CastMember(
+            "Yuki", Archetype.ROOKIE, BotStyle.MIMIC,
+            Look(SKIN1, 0xFF1A1A1A, Hair.BOB, 0xFF7E57C2, 0xFFD1C4E9, extras = listOf(Extra.GLASSES, Extra.LANYARD)),
+            4, 10, 1, 45, 8, 22, "Shy graduate student. Apologizes to everybody and plays like the dealer.",
+            listOf("Um, hello. Is it okay if I sit here?", "Sorry. First time. I read a lot about it."),
+            listOf("I should really study. Sorry. Bye.", "Thank you for letting me play. Sorry!"),
+        ),
+        CastMember(
+            "Colonel Hargrove", Archetype.CAUTIOUS, BotStyle.BASIC,
+            Look(SKIN2, 0xFFE0E0E0, Hair.BUZZ, 0xFF33691E, 0xFFFFD54F, extras = listOf(Extra.MUSTACHE, Extra.BOW_TIE)),
+            20, 45, 2, 35, 20, 45, "Retired army colonel. Treats the table like a mission and sticks to his plan.",
+            listOf("Evening. Let's keep this orderly.", "Colonel Hargrove, reporting for a few hands."),
+            listOf("Mission complete. Dismissed.", "Fall out, everyone. Good night."),
+        ),
+        CastMember(
+            "Savannah", Archetype.HIGH_ROLLER, BotStyle.AGGRESSIVE,
+            Look(SKIN5, 0xFF0D0D0D, Hair.SLICK, 0xFF1A1A1A, 0xFFE91E63, extras = listOf(Extra.SUNGLASSES, Extra.GOLD_CHAIN)),
+            100, 250, 10, 55, 12, 30, "Professional poker player on a night off. Big bets, big talk, and no patience for timid play.",
+            listOf("Blackjack. How quaint. Deal me in.", "Let's see how brave this table is."),
+            listOf("Too slow for me. I'm going back to poker.", "This was a warm-up. Night."),
+        ),
     )
 
     fun byName(name: String) = ALL.first { it.name == name }
@@ -381,7 +465,7 @@ class TableLife(
                 if (r == LeaveReason.BUSTED && canRebuy(s)) {
                     val add = s.buyIn
                     seats[i] = s.copy(chips = s.chips + add, rebuys = s.rebuys + 1, lossStreak = 0, tilted = true)
-                    out += TableEvent.Rebuy(i, seats[i]!!, if (rnd.nextBoolean()) rebuyLine(s.who.archetype) else TableTalk.say(s.who.archetype, Talk.REBUY, rnd)!!)
+                    out += TableEvent.Rebuy(i, seats[i]!!, if (rnd.nextBoolean()) rebuyLine(s.who.archetype) else TableTalk.say(s.who, Talk.REBUY, rnd)!!)
                 } else out += leave(i, r)
             }
         }
@@ -441,12 +525,12 @@ class TableLife(
         seats[i] = null
         if (pitWatching == i) { pitWatching = -1; pitBackoff = null }
         val line = when (r) {
-            LeaveReason.BUSTED -> TableTalk.say(s.who.archetype, Talk.BUSTED_OUT, rnd)!!
-            LeaveReason.WIN_GOAL -> if (rnd.nextBoolean()) TableTalk.say(s.who.archetype, Talk.WIN_GOAL, rnd)!! else s.who.bye[0]
+            LeaveReason.BUSTED -> TableTalk.say(s.who, Talk.BUSTED_OUT, rnd)!!
+            LeaveReason.WIN_GOAL -> if (rnd.nextBoolean()) TableTalk.say(s.who, Talk.WIN_GOAL, rnd)!! else s.who.bye[0]
             LeaveReason.STOP_LOSS -> s.who.bye.getOrElse(1) { s.who.bye[0] }
-            LeaveReason.COLD_SHOE -> TableTalk.say(s.who.archetype, Talk.COLD_SHOE, rnd) ?: "This shoe's dead. I'll find another table."
+            LeaveReason.COLD_SHOE -> TableTalk.say(s.who, Talk.COLD_SHOE, rnd) ?: "This shoe's dead. I'll find another table."
             LeaveReason.BACKED_OFF -> "Fine. Plenty of casinos in this town."
-            LeaveReason.TILT -> TableTalk.say(s.who.archetype, Talk.TILT, rnd) ?: "I'm done!"
+            LeaveReason.TILT -> TableTalk.say(s.who, Talk.TILT, rnd) ?: "I'm done!"
             LeaveReason.FLAT_BET -> "Flat bet only? Then I'm out."
             LeaveReason.TIME -> s.who.bye[rnd.nextInt(s.who.bye.size)]
         }
@@ -469,7 +553,7 @@ class TableLife(
                 pitBackoff = kind
                 when (kind) {
                     Backoff.ASKED_TO_LEAVE -> {
-                        out += TableEvent.PitAct(pitWatching, kind, TableTalk.pit("leave", rnd), TableTalk.say(s.who.archetype, Talk.BACKOFF_REPLY, rnd)!!)
+                        out += TableEvent.PitAct(pitWatching, kind, TableTalk.pit("leave", rnd), TableTalk.say(s.who, Talk.BACKOFF_REPLY, rnd)!!)
                         barred += s.who.name
                         out += leave(pitWatching, LeaveReason.BACKED_OFF)
                     }
@@ -516,7 +600,7 @@ class TableLife(
             o == Outcome.PUSH -> Talk.PUSH
             else -> Talk.LOSE
         }
-        return TableTalk.say(a, t, rnd)
+        return TableTalk.say(s.who, t, rnd)
     }
 
     /** Small talk between hands from someone at the table, sometimes with a reply. */
@@ -526,12 +610,12 @@ class TableLife(
         val i = here[rnd.nextInt(here.size)]
         val s = seats[i]!!
         if (rnd.nextInt(100) >= s.who.talky) return emptyList()
-        val line = TableTalk.say(s.who.archetype, Talk.IDLE, rnd) ?: return emptyList()
+        val line = TableTalk.say(s.who, Talk.IDLE, rnd) ?: return emptyList()
         val out = mutableListOf(TableEvent.Say(i, line))
         val others = here.filter { it != i && seats[it]!!.who.talky >= 40 }
         if (others.isNotEmpty() && rnd.nextInt(100) < 35) {
             val j = others[rnd.nextInt(others.size)]
-            TableTalk.say(seats[j]!!.who.archetype, Talk.REPLY, rnd)?.let { out += TableEvent.Say(j, it) }
+            TableTalk.say(seats[j]!!.who, Talk.REPLY, rnd)?.let { out += TableEvent.Say(j, it) }
         }
         return out
     }

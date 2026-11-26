@@ -6,7 +6,7 @@ import kotlin.random.Random
 enum class Talk {
     ARRIVE, WIN, BIG_WIN, LOSE, BUST, BLACKJACK, PUSH, DEALER_BUST, YOU_BLACKJACK, YOU_BIG_WIN,
     WIN_STREAK, LOSS_STREAK, BIG_BET, REBUY, IDLE, REPLY, BUSTED_OUT, WIN_GOAL, COLD_SHOE, TILT, BACKOFF_REPLY,
-    DEALER_WEAK, DEALER_STRONG, NEW_PLAYER, SHUFFLE, YOU_BUST, YOU_LOSE_BIG, PEEK, DOUBLE, TIP, ETIQUETTE_REPLY,
+    DEALER_WEAK, DEALER_STRONG, NEW_PLAYER, SHUFFLE, YOU_BUST, YOU_LOSE_BIG, PEEK, DOUBLE, TIP, ETIQUETTE_REPLY, SPLIT,
 }
 
 /**
@@ -129,13 +129,20 @@ object TableTalk {
         return choose(pool, rnd)
     }
 
+    /** What a named person says: their own lines most of the time, with the archetype lines mixed in for variety. */
+    fun say(who: CastMember, t: Talk, rnd: Random = Random.Default): String? {
+        val mine = CharTalk.lines(who.name, t)
+        if (mine.isNotEmpty() && rnd.nextInt(100) < 65) return choose(mine, rnd)
+        return say(who.archetype, t, rnd) ?: if (mine.isNotEmpty()) choose(mine, rnd) else null
+    }
+
     fun pit(kind: String, rnd: Random = Random.Default): String = choose(PIT.getValue(kind), rnd)
 
     fun dealer(lines: List<String>, rnd: Random = Random.Default): String = choose(lines, rnd)
 
     /** Every distinct line, for counting and for checking punctuation. */
     fun allLines(): List<String> =
-        (PLAYER.flatMap { it.third } + MoreTalk.allLines() + PIT.values.flatten() +
+        (PLAYER.flatMap { it.third } + MoreTalk.allLines() + CharTalk.allLines() + PIT.values.flatten() +
             Cast.ALL.flatMap { it.hello + it.bye } +
             CasualDealers.ALL.flatMap { it.greet + it.chatter + it.onBust + it.onBlackjack + it.onPlayerBlackjack + it.shiftOut }).distinct()
 

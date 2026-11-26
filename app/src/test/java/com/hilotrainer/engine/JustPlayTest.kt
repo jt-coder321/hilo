@@ -28,6 +28,7 @@ class JustPlayTest {
 
     @Test fun sevenHundredUniqueLinesNoDashes() {
         val lines = TableTalk.allLines().distinct()
+        println("TOTAL_UNIQUE_LINES ${lines.size} CAST ${Cast.ALL.size}")
         assertTrue("only ${lines.size} unique lines", lines.size >= 700)
         lines.forEach { assertFalse(it, it.contains('\u2014') || it.contains('\u2013') || it.contains(" - ")) }
         val extra = MoreTalk.allLines().distinct()
@@ -61,6 +62,30 @@ class JustPlayTest {
         // A snapshot from a different shoe size or a damaged one is refused and changes nothing.
         val c = Shoe(2, 0.75, Random(1)); val before = c.snapshot()
         assertFalse(c.restore(text)); assertFalse(c.restore("junk")); assertEquals(before, c.snapshot())
+    }
+
+    @Test fun twelveNewCharactersEachHaveTheirOwnVoice() {
+        val newOnes = listOf("Priya", "Gus", "Kenji", "Delilah", "Bruno", "Fiona", "Omar", "Chloe", "Reggie", "Yuki", "Colonel Hargrove", "Savannah")
+        assertEquals(newOnes.toSet(), CharTalk.names())
+        newOnes.forEach { n -> assertEquals(n, Cast.byName(n).name) }
+        assertTrue(Cast.ALL.size >= 25)
+        val all = CharTalk.allLines()
+        assertEquals("duplicate lines across characters", all.size, all.toSet().size)
+        newOnes.forEach { n ->
+            val mine = Talk.entries.sumOf { CharTalk.lines(n, it).size }
+            assertTrue("$n has only $mine lines", mine in 36..45)
+            listOf(Talk.WIN, Talk.BIG_WIN, Talk.LOSE, Talk.BUST, Talk.BLACKJACK, Talk.PUSH, Talk.WIN_STREAK, Talk.LOSS_STREAK, Talk.BIG_BET, Talk.IDLE, Talk.DOUBLE, Talk.SPLIT)
+                .forEach { assertTrue("$n $it", CharTalk.lines(n, it).isNotEmpty()) }
+        }
+        all.forEach { assertFalse(it, it.contains('\u2014') || it.contains('\u2013') || it.contains(" - ")) }
+        // Nobody borrows a line from the older cast.
+        val old = TableTalk.allLines().toSet() - all.toSet()
+        assertEquals(emptySet<String>(), all.toSet().intersect(old))
+        // Each character shows up in the table's cast and talks in their own words.
+        val r = Random(2)
+        TableTalk.resetMemory()
+        val line = TableTalk.say(Cast.byName("Gus"), Talk.WIN, r)
+        assertNotNull(line)
     }
 
     @Test fun talkAvoidsRepeats() {

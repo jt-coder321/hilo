@@ -311,7 +311,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         val seats = life.seats.indices.filter { life.seats[it] != null && it != except }
         if (seats.isEmpty()) return null
         val i = seats[rnd.nextInt(seats.size)]
-        val line = TableTalk.say(life.seats[i]!!.who.archetype, talk, rnd) ?: return null
+        val line = TableTalk.say(life.seats[i]!!.who, talk, rnd) ?: return null
         say(i, line)
         return i
     }
@@ -465,7 +465,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             // Big bets get a comment.
             playing.forEach { i ->
                 val s = life.seats[i]!!
-                if (s.bet >= s.who.baseUnits * settings.tableMin * 3 && rnd.nextInt(100) < s.who.talky + 20) TableTalk.say(s.who.archetype, Talk.BIG_BET, rnd)?.let { say(i, it) }
+                if (s.bet >= s.who.baseUnits * settings.tableMin * 3 && rnd.nextInt(100) < s.who.talky + 20) TableTalk.say(s.who, Talk.BIG_BET, rnd)?.let { say(i, it) }
             }
             val pp = if (settings.sideBets && stake > 0) ppBet.coerceAtMost(bankroll - stake) else 0
             val tp = if (settings.sideBets && stake > 0 && tpBet > 0 && bankroll - stake - pp >= tpBet) tpBet else 0
@@ -509,6 +509,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (!instant) viewModelScope.launch { delay(1600); actions.remove(YOU) }
         if (a == Action.DOUBLE && rnd.nextInt(100) < 40) say(DEALER, MoreTalk.dealerSays(dealer.name, "double", rnd))
         if (a == Action.SPLIT && rnd.nextInt(100) < 40) say(DEALER, MoreTalk.dealerSays(dealer.name, "split", rnd))
+        if (a == Action.SPLIT) playerSay(Talk.SPLIT, 30)
         viewModelScope.launch { reveal(); after() }
     }
 
@@ -545,7 +546,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                 val hand = gs.bots.getOrNull(b)
                 val doubling = hand != null && hand.doubled && hand.seqs.lastOrNull() == s
                 actions[owner] = if (doubling) "Double" else "Hit"
-                if (doubling && rnd.nextInt(100) < 50) life.seats.getOrNull(owner)?.let { st -> TableTalk.say(st.who.archetype, Talk.DOUBLE, rnd)?.let { say(owner, it) } }
+                if (doubling && rnd.nextInt(100) < 50) life.seats.getOrNull(owner)?.let { st -> TableTalk.say(st.who, Talk.DOUBLE, rnd)?.let { say(owner, it) } }
                 if (!instant) { delay(thinkMs(life.seats.getOrNull(owner)?.who?.archetype)); viewModelScope.launch { delay(1200); actions.remove(owner) } }
             }
             reach = Reach(owner, k())
@@ -596,7 +597,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                 val tipper = nets.entries.firstOrNull { (seat, n) -> n >= min * 6 && life.seats.getOrNull(seat)?.who?.archetype in MoreTalk.tippers && rnd.nextInt(100) < 30 }
                 if (tipper != null) {
                     val st = life.seats[tipper.key] ?: return
-                    TableTalk.say(st.who.archetype, Talk.TIP, rnd)?.let { say(tipper.key, it) }
+                    TableTalk.say(st.who, Talk.TIP, rnd)?.let { say(tipper.key, it) }
                     viewModelScope.launch {
                         if (!instant) delay(1500)
                         say(DEALER, MoreTalk.dealerSays(dealer.name, "thanks", rnd))
@@ -607,7 +608,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                     say(DEALER, MoreTalk.dealerSays(dealer.name, "etiquette", rnd))
                     viewModelScope.launch {
                         if (!instant) delay(1700)
-                        TableTalk.say(life.seats[off]?.who?.archetype ?: return@launch, Talk.ETIQUETTE_REPLY, rnd)?.let { say(off, it) }
+                        TableTalk.say(life.seats[off]?.who ?: return@launch, Talk.ETIQUETTE_REPLY, rnd)?.let { say(off, it) }
                     }
                 }
             }
@@ -683,7 +684,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (bj || net >= settings.tableMin * 10) life.seats.forEach { s -> if (s != null && rnd.nextInt(3) == 0) mood(s.id, Mood.CHEER, 1600) }
         val events = life.afterRound(nets, outs, game.upcomingTrueCount(), dealerBust, bj)
         if (net >= settings.tableMin * 10 && !bj) life.seats.indices.firstOrNull { life.seats[it] != null && rnd.nextInt(100) < 40 }?.let { i ->
-            TableTalk.say(life.seats[i]!!.who.archetype, Talk.YOU_BIG_WIN, rnd)?.let { say(i, it) }
+            TableTalk.say(life.seats[i]!!.who, Talk.YOU_BIG_WIN, rnd)?.let { say(i, it) }
         }
         roundExtrasTalk(net, g.results.isNotEmpty() && g.results.all { it.outcome == Outcome.BUST }, nets)
         roundOver = true

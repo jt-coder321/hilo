@@ -371,9 +371,9 @@ abstract class JustPlayShotBase {
         val looks = com.hilotrainer.engine.Cast.ALL.map { it.name to it.look } + com.hilotrainer.engine.CasualDealers.ALL.map { it.name to it.look }
         shoot("jp-faces") {
             androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0F5A37))) {
-                looks.chunked(4).forEachIndexed { r, row ->
+                looks.chunked(6).forEachIndexed { r, row ->
                     androidx.compose.foundation.layout.Row {
-                        row.forEachIndexed { i, (n, l) -> Avatar(l, 100.dp, mood = Mood.entries[(r * 4 + i) % Mood.entries.size], dealer = n in setOf("Vera", "Danny", "Mr. Grant"), name = n) }
+                        row.forEachIndexed { i, (n, l) -> Avatar(l, 64.dp, mood = Mood.entries[(r * 6 + i) % Mood.entries.size], dealer = n in setOf("Vera", "Danny", "Mr. Grant"), name = n) }
                     }
                 }
             }
