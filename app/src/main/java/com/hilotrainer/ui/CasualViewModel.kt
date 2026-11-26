@@ -480,7 +480,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     fun cycleLL() { if (canBet) { llBet = nextSide(llBet); fx(Fx.CHIP) } }
     fun cycleNC() { if (canBet) { ncBet = nextSide(ncBet); fx(Fx.CHIP) } }
     fun callNC(i: Int) { if (canBet) { ncCall = i.coerceIn(0, 2); fx(Fx.CHIP) } }
-    val miniTotal: Int get() = llBet + ncBet
+    val miniTotal: Int get() = ppBet + tpBet + llBet + ncBet
 
     private fun grantPower(reason: String) {
         if (power.sum() >= 6) return

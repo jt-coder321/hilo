@@ -766,9 +766,8 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
         }
         Text(if (vm.bet > 0) money(vm.bet) else "Tap chips to bet", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Cream, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = cy + circle + 4.dp))
         if (vm.settings.sideBets) {
-            SideSpot("Perfect Pairs", vm.ppBet, Modifier.offset(w / 2 - 120.dp, cy - 72.dp)) { vm.cyclePP() }
-            SideSpot("21+3", vm.tpBet, Modifier.offset(w / 2 - 40.dp, cy - 72.dp)) { vm.cycleTP() }
-            SideSpot("Mini games", vm.miniTotal, Modifier.offset(w / 2 + 40.dp, cy - 72.dp)) { vm.miniOpen = true }
+            // One small spot in the clear space between the two inner seats, so it never covers anyone.
+            SideSpot("Side bets", vm.miniTotal, Modifier.offset(w / 2 - 40.dp, cy - 72.dp)) { vm.miniOpen = true }
         }
     }
     if (hands.isNotEmpty() && !(bettingView && !vm.roundOver)) {

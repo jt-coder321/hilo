@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -334,8 +336,11 @@ fun PowerRow(vm: CasualViewModel) {
 fun MiniGamesDialog(vm: CasualViewModel) {
     if (!vm.miniOpen) return
     Scrim(onTap = { vm.miniOpen = false }) {
-        Text("MINI GAMES", fontSize = 18.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
-        Text("Casual side bets. They never count toward training.", fontSize = 12.sp, color = Cream.copy(alpha = 0.75f), textAlign = TextAlign.Center)
+        Text("SIDE BETS", fontSize = 18.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
+        Text("Tap a circle to change the bet. Casual only: they never count toward training.", fontSize = 12.sp, color = Cream.copy(alpha = 0.75f), textAlign = TextAlign.Center)
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        MiniRow("Perfect Pairs", "Your first two cards are a pair. Mixed 6 to 1, colored 12 to 1, perfect 25 to 1.", vm.ppBet) { vm.cyclePP() }
+        MiniRow("21+3", "Your two cards and the dealer's up card make a poker hand. Flush 5, straight 10, three of a kind 30, straight flush 40, suited trips 100 to 1.", vm.tpBet) { vm.cycleTP() }
         MiniRow("Lucky Ladies", "Your first two cards total 20. Any 20 pays 4 to 1, suited 9 to 1, matched 19 to 1, two queens of hearts 125 to 1.", vm.llBet) { vm.cycleLL() }
         MiniRow("Next Card", "Call your first card.", vm.ncBet) { vm.cycleNC() }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -349,6 +354,7 @@ fun MiniGamesDialog(vm: CasualViewModel) {
                     Text(NextCard.BLURB[i], fontSize = 10.sp, color = if (on) Ink else Cream.copy(alpha = 0.7f), textAlign = TextAlign.Center)
                 }
             }
+        }
         }
         GoldButton("Done", Modifier.width(160.dp)) { vm.miniOpen = false }
     }

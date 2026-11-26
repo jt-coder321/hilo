@@ -372,7 +372,7 @@ abstract class JustPlayShotBase {
     @Test fun powerUpsAndMiniGamesOnScreen() {
         val v = table(41)
         v.addChip(25)
-        v.cycleLL(); v.cycleNC()
+        v.cycleLL(); v.cycleNC(); v.cyclePP()
         shoot("jp-powerups-bet") { JustPlayScreen(v) {} }
     }
 
