@@ -12,14 +12,17 @@ android {
         applicationId = "com.hilotrainer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "9.9.0"
+        versionCode = 29
+        versionName = "9.9.1"
     }
 
     signingConfigs {
         getByName("debug") {
             // Shared key so rebuilt APKs install as updates over the previous version.
             storeFile = rootProject.file("signing/debug.keystore")
+            // Same key as every earlier build. v2 plus v3 signatures; v3 lets the key be rotated later without breaking updates.
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
     buildTypes {
