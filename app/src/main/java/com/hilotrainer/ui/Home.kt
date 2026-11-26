@@ -166,6 +166,7 @@ fun HomeScreen(prefs: Prefs? = null, go: (Screen) -> Unit) {
             }
             if (prefs != null) StatusStrip(prefs)
             JustPlayCard(prefs) { go(Screen.JUST_PLAY) }
+            RogueRunCard(prefs) { go(Screen.ROGUE_RUN) }
             PlayCard(settings) { go(Screen.PLAY) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val lessons = Course.LESSONS.size
@@ -240,6 +241,31 @@ private fun JustPlayCard(prefs: Prefs?, onClick: () -> Unit) {
         Row(Modifier.align(Alignment.CenterEnd).padding(end = 16.dp), horizontalArrangement = Arrangement.spacedBy((-14).dp)) {
             listOf(5, 25, 100).forEach { v -> CasualChipStack(v, 42.dp) }
         }
+    }
+}
+
+/** The roguelike mode gets its own front door, not a corner of Just Play. */
+@Composable
+private fun RogueRunCard(prefs: Prefs?, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    val store = remember { prefs?.let { CasualStore(it.context) } }
+    val saved = store?.runSave?.takeIf { it.isNotBlank() }
+    val ante = saved?.split("|")?.getOrNull(2)
+    Box(
+        Modifier.fillMaxWidth().height(84.dp).clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xFF3B2A78), Color(0xFF1B1240))))
+            .border(1.5.dp, Gold.copy(alpha = 0.7f), shape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "Rogue Run, a roguelike blackjack mode" },
+    ) {
+        Column(Modifier.align(Alignment.CenterStart).padding(start = 20.dp, end = 110.dp)) {
+            Text("Rogue Run", fontSize = 24.sp, fontWeight = FontWeight.Black, fontFamily = TitleFont, color = Cream)
+            Text(
+                if (ante != null) "Continue your run  ·  Ante $ante of 6" else "Beat the blinds, stack perks",
+                fontSize = 14.sp, color = Cream.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text("x", Modifier.align(Alignment.CenterEnd).padding(end = 22.dp), fontSize = 34.sp, fontWeight = FontWeight.Black, color = Gold)
     }
 }
 

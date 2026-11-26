@@ -1,5 +1,7 @@
 package com.hilotrainer.ui
 
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -616,11 +618,18 @@ abstract class JustPlayShotBase {
         assertTrue(!v2.hasSave)
         assertEquals(1, v2.store.runBest)
     }
-    @Test fun runMenuEntryOpensTheRun() {
-        val v = casualVm(9)
+    @Test fun runRespondsToRealTaps() {
+        val v = runVm(9, com.hilotrainer.engine.StartDeck.STANDARD)
         assertTrue(CasualTabs == listOf("Games", "Table", "Settings", "Me"))
-        v.runOpen = true
-        shoot("run-from-table") { JustPlayScreen(v) {} }
+        rule.setContent { HiLoTheme { Box(Modifier.fillMaxSize().background(Ink)) { RunScreen(v.store, {}, v) } } }
+        rule.waitForIdle()
+        rule.onNodeWithText("Play blind").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Deal").assertExists()
+        rule.onNodeWithText("Deal").performClick()
+        rule.mainClock.advanceTimeBy(4000)
+        rule.waitForIdle()
+        assertTrue(v.run!!.inRound || v.run!!.handsLeft < 5)
     }
 
     @Test fun menuRemembersTheLastTabAndSettingsAreSearchable() {

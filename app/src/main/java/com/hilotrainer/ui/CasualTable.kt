@@ -154,7 +154,6 @@ fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
         MiniGamesDialog(vm)
         Toasts(vm)
         PerkToasts(vm)
-        if (vm.runOpen) RunScreen(vm.store, onExit = { vm.runOpen = false })
     }
 }
 

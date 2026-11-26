@@ -158,6 +158,7 @@ private fun RunTop(vm: RunVm, r: Run?, onBack: () -> Unit) {
 
 @Composable
 private fun StartPane(vm: RunVm) {
+    vm.rev
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Beat the blinds", fontSize = 26.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
         Text(
@@ -186,6 +187,7 @@ private fun StartPane(vm: RunVm) {
 
 @Composable
 private fun SelectPane(vm: RunVm, r: Run) {
+    vm.rev
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         for (i in 0..2) BlindCard(vm, r, i)
         Text("Your perks", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold)
@@ -196,6 +198,7 @@ private fun SelectPane(vm: RunVm, r: Run) {
 
 @Composable
 private fun BlindCard(vm: RunVm, r: Run, i: Int) {
+    vm.rev
     val active = i == r.blind
     val done = i < r.blind
     val boss = if (i == 2) r.boss else null
@@ -229,9 +232,10 @@ private fun BlindCard(vm: RunVm, r: Run, i: Int) {
 
 @Composable
 private fun PlayPane(vm: RunVm, r: Run) {
+    vm.rev
     val gs = r.gs
     Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ScorePanel(r)
+        ScorePanel(r, vm.rev)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.verticalGradient(listOf(Color(0xFF14573A), Color(0xFF0C3D29))))) {
             val mw = maxWidth
             val cw = minOf(maxWidth * 0.17f, (maxHeight - 64.dp) / 2.9f, 84.dp).coerceAtLeast(34.dp)
@@ -256,14 +260,14 @@ private fun PlayPane(vm: RunVm, r: Run) {
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(50)).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
-        Tally(r)
+        Tally(r, vm.rev)
         PerkRow(vm, r, Modifier.fillMaxWidth(), fire = r.lastScore)
         PlayControls(vm, r)
     }
 }
 
 @Composable
-private fun ScorePanel(r: Run) {
+private fun ScorePanel(r: Run, rev: Int) {
     val frac by androidx.compose.animation.core.animateFloatAsState((r.score.toFloat() / r.target).coerceIn(0f, 1f), tween(500), label = "bar")
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0x33000000)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -328,7 +332,7 @@ private fun Pop(modifier: Modifier, content: @Composable () -> Unit) {
 
 /** The tally of the last round: chips times mult for each scoring hand, counting up, with what each perk added. */
 @Composable
-private fun Tally(r: Run) {
+private fun Tally(r: Run, rev: Int) {
     val evs = if (r.inRound) emptyList() else r.lastScore
     Column(Modifier.fillMaxWidth().heightIn(min = 58.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x26000000)).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
         if (evs.isEmpty()) { Text(if (r.inRound) "Hit, stand, double or split. Win to score chips x mult." else "Win a hand to score chips x mult.", fontSize = 13.sp, color = Cream.copy(alpha = 0.65f)); return@Column }
@@ -373,6 +377,7 @@ private fun key(k: Any, content: @Composable () -> Unit) = androidx.compose.runt
 
 @Composable
 private fun PerkRow(vm: RunVm, r: Run, modifier: Modifier, fire: List<ScoreEvent> = emptyList()) {
+    vm.rev
     val firedNames = fire.flatMap { it.triggers }.map { it.perk }.toSet()
     val fireKey = fire.firstOrNull()?.key ?: 0
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -405,6 +410,7 @@ private fun PerkTile(pk: Perk, fire: Int, onTap: () -> Unit) {
 
 @Composable
 private fun PlayControls(vm: RunVm, r: Run) {
+    vm.rev
     val gs = r.gs
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (!r.inRound) {
@@ -439,6 +445,7 @@ private fun PlayControls(vm: RunVm, r: Run) {
 
 @Composable
 private fun CashoutPane(vm: RunVm, r: Run) {
+    vm.rev
     val co = r.cashout ?: return
     val pop = remember { Animatable(0.4f) }
     LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 300f)) }
@@ -458,6 +465,7 @@ private fun CashoutPane(vm: RunVm, r: Run) {
 
 @Composable
 private fun ShopPane(vm: RunVm, r: Run) {
+    vm.rev
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("THE SHOP", fontSize = 22.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
         r.offers.forEachIndexed { i, o ->
@@ -489,6 +497,7 @@ private fun ShopPane(vm: RunVm, r: Run) {
 
 @Composable
 private fun PerkSheet(vm: RunVm, r: Run, i: Int, pk: Perk) {
+    vm.rev
     val col = rarityColor(pk.rarity)
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable { vm.perkOpen = null }, contentAlignment = Alignment.Center) {
         Column(
@@ -509,6 +518,7 @@ private fun PerkSheet(vm: RunVm, r: Run, i: Int, pk: Perk) {
 
 @Composable
 private fun EndPane(vm: RunVm, r: Run, onExit: () -> Unit) {
+    vm.rev
     val won = r.phase == RunPhase.WON
     val pop = remember { Animatable(0.4f) }
     LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 300f)) }

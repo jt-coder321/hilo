@@ -146,14 +146,13 @@ private fun SubTabs(options: List<String>, selected: Int, onPick: (Int) -> Unit)
     }
 }
 
-/** Everything you can play besides the open table: the Rogue Run, the story nights, and how the side games work. */
+/** Story nights and how the side games work. */
 @Composable
 private fun GamesTab(vm: CasualViewModel, onClose: () -> Unit, start: Int = 0) {
     var part by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(start) }
-    SubTabs(listOf("Rogue Run", "Story Nights", "Side games"), part) { part = it }
+    SubTabs(listOf("Story Nights", "Side games"), part) { part = it }
     when (part) {
-        0 -> RunTab(vm, onClose)
-        1 -> NightsTab(vm)
+        0 -> NightsTab(vm)
         else -> SideGamesInfo()
     }
 }
@@ -289,18 +288,4 @@ private fun Person(look: com.hilotrainer.engine.Look, name: String, kind: String
             Text(bio, fontSize = 12.sp, color = Cream.copy(alpha = 0.72f))
         }
     }
-}
-
-/** The roguelike run: a way in, and what it is. */
-@Composable
-private fun RunTab(vm: CasualViewModel, onClose: () -> Unit) {
-    Text("Rogue Run", fontSize = 20.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
-    Text(
-        "A roguelike mode. Beat a chip target in a few hands to clear each blind, earn money, and buy perks that bend the scoring. " +
-            "Stack them, find combos, and survive the boss blinds with their rule twists. Six antes of three blinds each.",
-        fontSize = 14.sp, color = Cream.copy(alpha = 0.85f),
-    )
-    Text("Some perks reward counting: the Spotter shows the Hi-Lo running count and Card Sharp pays when the true count is high.", fontSize = 13.sp, color = Cream.copy(alpha = 0.7f))
-    Text("Casual only. It plays on its own shoe and never touches your training stats.", fontSize = 12.sp, color = Cream.copy(alpha = 0.6f))
-    GoldButton(if (vm.store.runSave.isNullOrBlank()) "Start a Rogue Run" else "Open your Rogue Run", Modifier.fillMaxWidth()) { vm.runOpen = true; onClose() }
 }
