@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -122,7 +123,8 @@ fun RunScreen(store: CasualStore, onExit: () -> Unit, vm: RunVm = remember { Run
     vm.rev
     val r = vm.run
     BackHandler { if (vm.perkOpen != null) vm.perkOpen = null else if (r != null) vm.leaveRun() else onExit() }
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0E2A1D), Color(0xFF07140E))))) {
+    val bg = Venues.of(r?.ante ?: 1).bg
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(bg, Color.Black.copy(alpha = 0.85f).compositeOver(bg))))) {
         Column(Modifier.fillMaxSize()) {
             RunTop(vm, r) { if (r != null) vm.leaveRun() else onExit() }
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -147,7 +149,7 @@ private fun RunTop(vm: RunVm, r: Run?, onBack: () -> Unit) {
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Gold) }
         Column(Modifier.weight(1f)) {
             Text("ROGUE RUN", fontSize = 11.sp, letterSpacing = 2.sp, color = Gold)
-            if (r != null && r.phase != RunPhase.OVER && r.phase != RunPhase.WON) Text("Ante ${r.ante} of ${Run.MAX_ANTE}  ·  ${if (r.phase == RunPhase.SHOP) "Shop" else r.blindName}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (r.isBoss) BossRed else Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (r != null && r.phase != RunPhase.OVER && r.phase != RunPhase.WON) Text("${Venues.of(r.ante).name}  ·  Ante ${r.ante} of ${Run.MAX_ANTE}  ·  ${if (r.phase == RunPhase.SHOP) "Shop" else r.blindName}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (r.isBoss) BossRed else Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else Text("Roguelike mode, casual only", fontSize = 13.sp, color = Cream.copy(alpha = 0.7f))
         }
         if (r != null) Text("\$${r.money}", fontSize = 20.sp, fontWeight = FontWeight.Black, color = GoodGreen, modifier = Modifier.padding(end = 12.dp).semantics { contentDescription = "Money ${r.money} dollars" })
@@ -189,6 +191,7 @@ private fun StartPane(vm: RunVm) {
 private fun SelectPane(vm: RunVm, r: Run) {
     vm.rev
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        VenueHeader(r, if (r.isBoss) "I'm ${r.boss.name}. ${r.boss.desc}" else "Welcome to ${Venues.of(r.ante).name}. ${Venues.of(r.ante).tag}.")
         for (i in 0..2) BlindCard(vm, r, i)
         Text("Your perks", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold)
         PerkRow(vm, r, Modifier.widthIn(max = 560.dp))
@@ -236,30 +239,7 @@ private fun PlayPane(vm: RunVm, r: Run) {
     val gs = r.gs
     Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ScorePanel(r, vm.rev)
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.verticalGradient(listOf(Color(0xFF14573A), Color(0xFF0C3D29))))) {
-            val mw = maxWidth
-            val cw = minOf(maxWidth * 0.17f, (maxHeight - 64.dp) / 2.9f, 84.dp).coerceAtLeast(34.dp)
-            Column(Modifier.fillMaxSize().padding(6.dp), verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally) {
-                val showHole = gs.holeRevealed || gs.phase == com.hilotrainer.engine.Phase.ROUND_OVER
-                Hand("DEALER", gs.dealerCards, cw, mw - 20.dp, hideIndex = if (showHole) -1 else 1, total = if (showHole) null else gs.dealerCards.firstOrNull()?.let { listOf(it) })
-                if (gs.hands.isEmpty()) Text("Pick a stake and deal.", fontSize = 15.sp, color = Cream.copy(alpha = 0.8f))
-                else {
-                    val many = gs.hands.size > 1
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                        gs.hands.forEachIndexed { i, h ->
-                            val ev = if (!r.inRound) r.lastScore.getOrNull(i) else null
-                            Column(Modifier.weight(1f, fill = false), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Hand(if (many) "HAND ${i + 1}" else "YOU", h.cards, if (many) cw * 0.78f else cw, if (many) (mw - 40.dp) / gs.hands.size else mw - 20.dp, active = r.inRound && i == gs.activeHand, result = ev)
-                            }
-                        }
-                    }
-                }
-            }
-            if (r.countVisible) Text(
-                "RUN ${gs.runningCount}  TRUE ${"%.1f".format(gs.trueCountExact)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Gold,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).clip(RoundedCornerShape(50)).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-        }
+        RunTable(vm, r, Modifier.weight(1f).fillMaxWidth())
         Tally(r, vm.rev)
         PerkRow(vm, r, Modifier.fillMaxWidth(), fire = r.lastScore)
         PlayControls(vm, r)
@@ -269,18 +249,18 @@ private fun PlayPane(vm: RunVm, r: Run) {
 @Composable
 private fun ScorePanel(r: Run, rev: Int) {
     val frac by androidx.compose.animation.core.animateFloatAsState((r.score.toFloat() / r.target).coerceIn(0f, 1f), tween(500), label = "bar")
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0x33000000)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0x33000000)).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("SCORE AT LEAST", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
-                Text(fmt(r.target), fontSize = 26.sp, fontWeight = FontWeight.Black, color = Cream)
+                Text(fmt(r.target), fontSize = 22.sp, fontWeight = FontWeight.Black, color = Cream)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("HANDS LEFT", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
-                Text("${r.handsLeft}", fontSize = 26.sp, fontWeight = FontWeight.Black, color = if (r.handsLeft <= 1) BadRed else Cream)
+                Text("${r.handsLeft}", fontSize = 22.sp, fontWeight = FontWeight.Black, color = if (r.handsLeft <= 1) BadRed else Cream)
             }
         }
-        Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(50)).background(Color(0x33FFFFFF))) {
+        Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50)).background(Color(0x33FFFFFF))) {
             Box(Modifier.fillMaxWidth(frac).fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xFFB8892B), Gold))))
         }
         Row {
@@ -293,10 +273,10 @@ private fun ScorePanel(r: Run, rev: Int) {
 }
 
 @Composable
-private fun Hand(label: String, cards: List<Card>, cw: Dp, maxW: Dp, hideIndex: Int = -1, total: List<Card>? = null, active: Boolean = false, result: ScoreEvent? = null) {
+internal fun Hand(label: String, cards: List<Card>, cw: Dp, maxW: Dp, hideIndex: Int = -1, total: List<Card>? = null, active: Boolean = false, result: ScoreEvent? = null, delayOf: (Int) -> Int = { 0 }) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(label, fontSize = 11.sp, letterSpacing = 1.sp, color = if (active) Gold else Cream.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
+            if (label.isNotEmpty()) Text(label, fontSize = 11.sp, letterSpacing = 1.sp, color = if (active) Gold else Cream.copy(alpha = 0.7f), fontWeight = FontWeight.Bold)
             if (cards.isNotEmpty()) {
                 val shown = total ?: cards
                 val (t, soft) = handTotal(shown)
@@ -314,7 +294,7 @@ private fun Hand(label: String, cards: List<Card>, cw: Dp, maxW: Dp, hideIndex: 
         }
         val step = if (cards.size <= 1) 0.dp else minOf(cw * 0.62f, (maxW - cw) / (cards.size - 1)).coerceAtLeast(cw * 0.2f)
         Box(Modifier.width(cw + step * (cards.size - 1).coerceAtLeast(0)).height(cw * 1.4f).then(if (active) Modifier.border(2.dp, Gold, RoundedCornerShape(8.dp)).padding(0.dp) else Modifier)) {
-            cards.forEachIndexed { i, c -> key2(c, i) { Pop(Modifier.offset(step * i, 0.dp)) { PlayingCard(c, cw, faceDown = i == hideIndex) } } }
+            cards.forEachIndexed { i, c -> key2(c, i) { Pop(Modifier.offset(step * i, 0.dp), delayOf(i)) { PlayingCard(c, cw, faceDown = i == hideIndex) } } }
         }
     }
 }
@@ -322,19 +302,25 @@ private fun Hand(label: String, cards: List<Card>, cw: Dp, maxW: Dp, hideIndex: 
 @Composable
 private fun key2(c: Card, i: Int, content: @Composable () -> Unit) = androidx.compose.runtime.key(c, i) { content() }
 
-/** A card that pops in when it first appears. */
+/** A card that is dealt in: it slides down from the shoe side and settles with a small bounce. */
 @Composable
-private fun Pop(modifier: Modifier, content: @Composable () -> Unit) {
+internal fun Pop(modifier: Modifier, delayMs: Int = 0, content: @Composable () -> Unit) {
     val p = remember { Animatable(0.5f) }
-    LaunchedEffect(Unit) { p.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 500f)) }
-    Box(modifier.graphicsLayer { scaleX = p.value; scaleY = p.value; alpha = ((p.value - 0.5f) / 0.5f).coerceIn(0f, 1f) }) { content() }
+    LaunchedEffect(Unit) { if (delayMs > 0) kotlinx.coroutines.delay(delayMs.toLong()); p.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 420f)) }
+    Box(modifier.graphicsLayer {
+        val t = ((p.value - 0.5f) / 0.5f)
+        scaleX = 0.6f + 0.4f * p.value; scaleY = scaleX
+        alpha = t.coerceIn(0f, 1f)
+        translationY = -(1f - t.coerceIn(0f, 1f)) * 36.dp.toPx()
+        rotationZ = (1f - t.coerceIn(0f, 1f)) * -8f
+    }) { content() }
 }
 
 /** The tally of the last round: chips times mult for each scoring hand, counting up, with what each perk added. */
 @Composable
 private fun Tally(r: Run, rev: Int) {
     val evs = if (r.inRound) emptyList() else r.lastScore
-    Column(Modifier.fillMaxWidth().heightIn(min = 58.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x26000000)).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
+    Column(Modifier.fillMaxWidth().heightIn(min = 46.dp).clip(RoundedCornerShape(14.dp)).background(Color(0x26000000)).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
         if (evs.isEmpty()) { Text(if (r.inRound) "Hit, stand, double or split. Win to score chips x mult." else "Win a hand to score chips x mult.", fontSize = 13.sp, color = Cream.copy(alpha = 0.65f)); return@Column }
         val ev = evs.firstOrNull { it.total > 0 } ?: evs.first()
         if (evs.all { it.total == 0 }) {
@@ -384,7 +370,7 @@ private fun PerkRow(vm: RunVm, r: Run, modifier: Modifier, fire: List<ScoreEvent
         for (i in 0 until Run.SLOTS) {
             val pk = r.perks.getOrNull(i)
             Box(Modifier.weight(1f)) {
-                if (pk == null) Box(Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Cream.copy(alpha = 0.2f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                if (pk == null) Box(Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Cream.copy(alpha = 0.2f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
                     Text("Empty", fontSize = 10.sp, color = Cream.copy(alpha = 0.35f))
                 } else PerkTile(pk, if (pk.name in firedNames) fireKey else 0) { vm.perkOpen = i }
             }
@@ -398,7 +384,7 @@ private fun PerkTile(pk: Perk, fire: Int, onTap: () -> Unit) {
     LaunchedEffect(fire) { if (fire != 0) { s.animateTo(1.16f, tween(140)); s.animateTo(1f, spring(dampingRatio = 0.4f)) } }
     val col = rarityColor(pk.rarity)
     Column(
-        Modifier.fillMaxWidth().height(58.dp).graphicsLayer { scaleX = s.value; scaleY = s.value }.clip(RoundedCornerShape(10.dp))
+        Modifier.fillMaxWidth().height(48.dp).graphicsLayer { scaleX = s.value; scaleY = s.value }.clip(RoundedCornerShape(10.dp))
             .background(Brush.verticalGradient(listOf(col.copy(alpha = 0.28f), Color(0x33000000)))).border(1.5.dp, col.copy(alpha = if (fire != 0) 1f else 0.7f), RoundedCornerShape(10.dp))
             .clickable(onClick = onTap).semantics { contentDescription = "${pk.name}, ${pk.rarity.label} perk. ${pk.desc}" }.padding(4.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
@@ -419,7 +405,7 @@ private fun PlayControls(vm: RunVm, r: Run) {
                     val on = vm.stakePick == s
                     val ok = r.canDeal(s)
                     Column(
-                        Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(12.dp)).background(if (on) Gold else Color(0x22FFFFFF)).border(1.dp, Gold.copy(alpha = if (ok) 0.8f else 0.2f), RoundedCornerShape(12.dp))
+                        Modifier.weight(1f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(if (on) Gold else Color(0x22FFFFFF)).border(1.dp, Gold.copy(alpha = if (ok) 0.8f else 0.2f), RoundedCornerShape(12.dp))
                             .clickable(enabled = ok) { vm.stakePick = s; vm.rev++ }.semantics { contentDescription = "Stake $s. Wins score $s times the chips, a loss costs $s dollars." },
                         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
@@ -450,6 +436,7 @@ private fun CashoutPane(vm: RunVm, r: Run) {
     val pop = remember { Animatable(0.4f) }
     LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 300f)) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        VenueHeader(r, "Well played. The house pays up.", title = "")
         Text("BLIND CLEARED", fontSize = 28.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold, modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value })
         Text("${fmt(r.score)} of ${fmt(r.target)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Cream)
         Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0x33000000)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -467,7 +454,7 @@ private fun CashoutPane(vm: RunVm, r: Run) {
 private fun ShopPane(vm: RunVm, r: Run) {
     vm.rev
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("THE SHOP", fontSize = 22.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
+        VenueHeader(r, "Spend it wisely. Perks do not come cheap.", title = "THE SHOP")
         r.offers.forEachIndexed { i, o ->
             val col = rarityColor(o.rarity)
             Row(

@@ -586,6 +586,18 @@ abstract class JustPlayShotBase {
         }
         shoot("run-scored") { RunScreen(v.store, {}, v) }
     }
+    @Test fun runBossRoom() {
+        val v = runVm(11, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { setState(4, 2, 12, 0, false, 9, 0, 0, false) }
+        v.mut { startBlind() }
+        v.stakePick = 1; v.deal()
+        shoot("run-boss") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runBossSelect() {
+        val v = runVm(12, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { setState(5, 2, 15, 0, false, 12, 0, 0, false) }
+        shoot("run-boss-select") { RunScreen(v.store, {}, v) }
+    }
     @Test fun runCashoutAndShop() {
         val v = runVm(5, com.hilotrainer.engine.StartDeck.STANDARD)
         var tries = 0

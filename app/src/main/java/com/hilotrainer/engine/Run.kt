@@ -173,7 +173,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     var money = deck.money; private set
     val perks = mutableListOf<Perk>()
     var boss: Boss = Bosses.ALL[rnd.nextInt(Bosses.ALL.size)]; private set
-    var game = BlackjackGame(RULES, 1_000_000, rnd)
+    var game = BlackjackGame(RULES, 1_000_000, rnd, botCount = 2)
         private set
 
     var score = 0; private set
