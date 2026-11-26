@@ -144,11 +144,13 @@ fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().themedFelt(s.theme)) {
                 TableArea(vm, maxWidth, maxHeight) { wheelOpen = true }
             }
+            PowerRow(vm)
             Controls(vm)
         }
         if (menu != null) CasualMenu(vm, menu!!, onTab = { menu = it }) { menu = null }
         if (wheelOpen && (vm.wheelReady || vm.wheelIdx != null)) WheelDialog(vm) { wheelOpen = false }
         LuckyDialog(vm)
+        MiniGamesDialog(vm)
         Toasts(vm)
         PerkToasts(vm)
     }
@@ -161,13 +163,15 @@ private fun TopBar(vm: CasualViewModel, onBack: () -> Unit, openMenu: (Int) -> U
         Column(Modifier.weight(1f)) {
             Text("JUST PLAY", fontSize = 11.sp, letterSpacing = 2.sp, color = Gold)
             val shown by animateFloatAsState(vm.bankroll.toFloat(), tween(700), label = "bank")
-            Text(money(shown.toInt()), fontSize = 22.sp, fontWeight = FontWeight.Black, color = Cream, modifier = Modifier.semantics { contentDescription = "Bankroll ${money(vm.bankroll)}" })
+            Text(money(shown.toInt()), fontSize = 22.sp, fontWeight = FontWeight.Black, color = Cream, maxLines = 1, modifier = Modifier.semantics { contentDescription = "Bankroll ${money(vm.bankroll)}" })
         }
+        CountChip(vm)
+        Spacer(Modifier.width(6.dp))
         val bonus = vm.bonusAvailable()
         if (bonus != null && vm.canBet) {
             Box(
                 Modifier.clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(listOf(Color(0xFFF6DA8C), Gold))).clickable { vm.claimBonus() }.padding(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text("Daily bonus +${money(bonus.first)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Ink) }
+            ) { Text("Bonus +${money(bonus.first)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1) }
             Spacer(Modifier.width(4.dp))
         }
         IconButton(onClick = { openMenu(0) }, modifier = Modifier.size(48.dp)) { Icon(Icons.Filled.Menu, contentDescription = "Table menu", tint = Gold) }
@@ -284,9 +288,13 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp, onWheel: () -> Unit) {
 
     ChatLayer(vm, w, dz, dCard, dealerSize, seatXdp, seatYdp, youTop)
     FunBadges(vm, onWheel, Modifier.offset(6.dp, 4.dp))
-    CountChip(vm, Modifier.offset(w - 100.dp, 4.dp).width(94.dp))
     // How your round went, over the felt printing.
     vm.banner?.let { b -> key(b.key) { ResultBanner(b, Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 6.dp)) } }
+    vm.peeked?.let { c ->
+        Box(Modifier.width(w).offset(y = dCardsY + dCard * 1.4f + 6.dp), contentAlignment = Alignment.Center) {
+            Text("Peek: hole card is ${c.rank.label}${c.suit.symbol}", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.clip(RoundedCornerShape(50)).background(Cream).border(2.dp, if (c.suit.isRed) Color(0xFFC62828) else Ink, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 4.dp))
+        }
+    }
 }
 
 
@@ -758,8 +766,9 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
         }
         Text(if (vm.bet > 0) money(vm.bet) else "Tap chips to bet", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Cream, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = cy + circle + 4.dp))
         if (vm.settings.sideBets) {
-            SideSpot("Perfect Pairs", vm.ppBet, Modifier.offset(w / 2 - 78.dp, cy - 72.dp)) { vm.cyclePP() }
-            SideSpot("21+3", vm.tpBet, Modifier.offset(w / 2 + 0.dp, cy - 72.dp)) { vm.cycleTP() }
+            SideSpot("Perfect Pairs", vm.ppBet, Modifier.offset(w / 2 - 120.dp, cy - 72.dp)) { vm.cyclePP() }
+            SideSpot("21+3", vm.tpBet, Modifier.offset(w / 2 - 40.dp, cy - 72.dp)) { vm.cycleTP() }
+            SideSpot("Mini games", vm.miniTotal, Modifier.offset(w / 2 + 40.dp, cy - 72.dp)) { vm.miniOpen = true }
         }
     }
     if (hands.isNotEmpty() && !(bettingView && !vm.roundOver)) {
@@ -805,6 +814,8 @@ private fun YourSpot(vm: CasualViewModel, w: Dp, top: Dp, card: Dp, shoe: DpOffs
         val notes = listOfNotNull(
             gs.perfectPairsResult?.takeIf { vm.shown > gs.roundStartSeq + 1 }?.let { "PP: $it" },
             vm.tpResult?.takeIf { vm.shown > gs.roundStartSeq + 2 }?.let { "21+3: $it" },
+            vm.llResult?.takeIf { vm.shown > gs.roundStartSeq + 2 }?.let { "Ladies: $it" },
+            vm.ncResult?.takeIf { vm.shown > gs.roundStartSeq + 1 }?.let { "Next card: $it" },
         )
         if (notes.isNotEmpty()) Text(notes.joinToString("   "), fontSize = 12.sp, color = Gold, textAlign = TextAlign.Center, modifier = Modifier.width(w).offset(y = top - 20.dp))
     }

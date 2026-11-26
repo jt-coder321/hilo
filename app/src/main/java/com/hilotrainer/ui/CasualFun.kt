@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -51,6 +52,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hilotrainer.engine.Tiers
+import com.hilotrainer.engine.PowerUp
+import com.hilotrainer.engine.NextCard
 import com.hilotrainer.engine.Wheel
 import kotlinx.coroutines.launch
 
@@ -254,34 +257,34 @@ fun TierList(vm: CasualViewModel, enabled: Boolean) {
 }
 
 /**
- * A small tap-to-toggle Hi-Lo counter in the top right corner of the felt, clear of the cards, the bets and the buttons.
- * Off, it is a faint "Count" tag. On, it shows the running count, the true count and the decks left.
+ * A small tap-to-toggle Hi-Lo counter that lives in the top bar, above the felt, so it can never cover the dealer, the pit boss,
+ * a player, the cards or anyone's words. Off, it is a faint "Count" tag. On, it shows the running and true count on one line.
  */
 @Composable
 fun CountChip(vm: CasualViewModel, modifier: Modifier = Modifier) {
     val on = vm.settings.showCount
     val shape = RoundedCornerShape(10.dp)
     Box(
-        modifier.clip(shape).background(Color(if (on) 0xE6101512 else 0x88101512)).border(1.dp, Gold.copy(alpha = if (on) 0.7f else 0.35f), shape)
+        modifier.clip(shape).background(Color(if (on) 0xE6101512 else 0x66101512)).border(1.dp, Gold.copy(alpha = if (on) 0.7f else 0.35f), shape)
             .clickable { vm.update(vm.settings.copy(showCount = !on)) }
             .semantics { contentDescription = if (on) "Card count on, running ${vm.countRun}, true ${"%.1f".format(vm.countTrue)}, ${vm.decksLeft} decks left. Tap to hide" else "Card count off. Tap to show" }
-            .padding(horizontal = 9.dp, vertical = 3.dp),
-        contentAlignment = Alignment.CenterEnd,
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
     ) {
         if (!on) {
-            Text("Count", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Gold.copy(alpha = 0.85f))
+            Text("Count", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Gold.copy(alpha = 0.85f), maxLines = 1)
         } else {
             val rc = vm.countRun
             val tc = vm.countTrue
             val col = { v: Double -> when { v > 0.49 -> Color(0xFF8EE6A0); v < -0.49 -> Color(0xFFFF9A8A); else -> Cream } }
             Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text("RUN ", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
-                    Text(signed(rc.toDouble(), 0), fontSize = 16.sp, fontWeight = FontWeight.Black, color = col(rc.toDouble() / 4))
+                    Text("RUN ", fontSize = 9.sp, letterSpacing = 1.sp, color = Gold)
+                    Text(signed(rc.toDouble(), 0), fontSize = 15.sp, fontWeight = FontWeight.Black, color = col(rc.toDouble() / 4), maxLines = 1)
                 }
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text("TRUE ", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
-                    Text(signed(tc, 1), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = col(tc))
+                    Text("TRUE ", fontSize = 9.sp, letterSpacing = 1.sp, color = Gold)
+                    Text(signed(tc, 1), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = col(tc), maxLines = 1)
                 }
             }
         }
@@ -291,4 +294,67 @@ fun CountChip(vm: CasualViewModel, modifier: Modifier = Modifier) {
 private fun signed(v: Double, digits: Int): String {
     val t = if (digits == 0) v.toInt().toString() else "%.${digits}f".format(v)
     return if (v > 0 && !t.startsWith("+")) "+$t" else t
+}
+
+/** Power-ups you hold, in a thin strip above the buttons. Casual only: they never touch training. */
+@Composable
+fun PowerRow(vm: CasualViewModel) {
+    val any = vm.power.sum() > 0 || vm.armedRefund || vm.armedCover
+    if (!any) return
+    Row(
+        Modifier.fillMaxWidth().background(Color(0xFF2A1A10)).padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("POWER-UPS", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold, modifier = Modifier.semantics { contentDescription = "Power-ups, casual only" })
+        PowerUp.entries.forEach { p ->
+            val n = vm.power[p.ordinal]
+            val armed = (p == PowerUp.REFUND && vm.armedRefund) || (p == PowerUp.COVER && vm.armedCover) || (p == PowerUp.PEEK && vm.peeked != null)
+            if (n > 0 || armed) {
+                Text(
+                    if (armed) "${p.short} on" else "${p.short} x$n", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (armed) Ink else Cream,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (armed) Gold else Color(0x33FFFFFF)).border(1.dp, Gold.copy(alpha = 0.6f), RoundedCornerShape(50))
+                        .clickable(enabled = !armed && n > 0) { vm.usePower(p) }.semantics { contentDescription = "${p.label}. ${p.desc}" }.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+/** The two casual mini game side bets. */
+@Composable
+fun MiniGamesDialog(vm: CasualViewModel) {
+    if (!vm.miniOpen) return
+    Scrim(onTap = { vm.miniOpen = false }) {
+        Text("MINI GAMES", fontSize = 18.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
+        Text("Casual side bets. They never count toward training.", fontSize = 12.sp, color = Cream.copy(alpha = 0.75f), textAlign = TextAlign.Center)
+        MiniRow("Lucky Ladies", "Your first two cards total 20. Any 20 pays 4 to 1, suited 9 to 1, matched 19 to 1, two queens of hearts 125 to 1.", vm.llBet) { vm.cycleLL() }
+        MiniRow("Next Card", "Call your first card.", vm.ncBet) { vm.cycleNC() }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            NextCard.CALLS.forEachIndexed { i, c ->
+                val on = vm.ncCall == i
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (on) Gold else Color(0x22FFFFFF)).clickable { vm.callNC(i) }.padding(vertical = 6.dp, horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(c, fontSize = 14.sp, fontWeight = FontWeight.Black, color = if (on) Ink else Cream)
+                    Text(NextCard.BLURB[i], fontSize = 10.sp, color = if (on) Ink else Cream.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                }
+            }
+        }
+        GoldButton("Done", Modifier.width(160.dp)) { vm.miniOpen = false }
+    }
+}
+
+@Composable
+private fun MiniRow(title: String, desc: String, amount: Int, onTap: () -> Unit) {
+    Row(Modifier.fillMaxWidth().widthIn(max = 380.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Cream)
+            Text(desc, fontSize = 11.sp, color = Cream.copy(alpha = 0.7f))
+        }
+        Box(
+            Modifier.size(52.dp).clickable(onClick = onTap).border(1.5.dp, Gold.copy(alpha = if (amount > 0) 0.9f else 0.45f), CircleShape).semantics { contentDescription = "$title bet ${if (amount == 0) "off" else money(amount)}. Tap to change" },
+            contentAlignment = Alignment.Center,
+        ) { if (amount > 0) CasualChipStack(amount, 32.dp) else Text("+", color = Gold.copy(alpha = 0.7f), fontSize = 22.sp) }
+    }
 }

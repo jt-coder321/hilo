@@ -36,6 +36,10 @@ import com.hilotrainer.engine.Seat
 import com.hilotrainer.engine.TableEvent
 import com.hilotrainer.engine.TableLife
 import com.hilotrainer.engine.MoreTalk
+import com.hilotrainer.engine.Card
+import com.hilotrainer.engine.PowerUp
+import com.hilotrainer.engine.LuckyLadies
+import com.hilotrainer.engine.NextCard
 import com.hilotrainer.engine.TableTalk
 import com.hilotrainer.engine.Talk
 import com.hilotrainer.engine.TwentyOnePlusThree
@@ -110,6 +114,25 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     var tpBet by mutableIntStateOf(0); private set
     var tpResult by mutableStateOf<String?>(null); private set
     private var tpNet = 0
+    /** Lucky Ladies and Next Card, the casual mini game side bets. */
+    var llBet by mutableIntStateOf(0); private set
+    var ncBet by mutableIntStateOf(0); private set
+    var ncCall by mutableIntStateOf(0); private set
+    var llResult by mutableStateOf<String?>(null); private set
+    var ncResult by mutableStateOf<String?>(null); private set
+    private var llNet = 0
+    private var ncNet = 0
+    var miniOpen by mutableStateOf(false)
+
+    /** Power-ups you hold, in the order of [PowerUp]. Casual only. */
+    val power = mutableStateListOf<Int>().also { l ->
+        if (!store.powerSeeded) { store.powerSeeded = true; repeat(3) { store.setPowerUp(it, 1) } }
+        l.addAll(store.powerUps())
+    }
+    var armedRefund by mutableStateOf(false); private set
+    var armedCover by mutableStateOf(false); private set
+    /** The hole card, shown after a Hole peek and only for this round. */
+    var peeked by mutableStateOf<Card?>(null); private set
     var roundOver by mutableStateOf(false); private set
     var dealtOnce by mutableStateOf(false); private set
 
@@ -380,22 +403,51 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     fun addChip(v: Int) {
         if (!canBet) return
         if (roundOver) clearTableForBet()
-        val room = minOf(maxBet, bankroll - ppBet - tpBet)
+        val room = minOf(maxBet, bankroll - ppBet - tpBet - llBet - ncBet)
         if (bet + v > room) { if (bet < room) { bet = room; fx(Fx.CHIP) }; return }
         bet += v; fx(Fx.CHIP)
     }
     fun clearBet() { if (canBet) { bet = 0; fx(Fx.CHIP) } }
-    fun doubleBet() { if (canBet) { bet = minOf(bet * 2, maxBet, bankroll - ppBet - tpBet).coerceAtLeast(0); fx(Fx.CHIP) } }
+    fun doubleBet() { if (canBet) { bet = minOf(bet * 2, maxBet, bankroll - ppBet - tpBet - llBet - ncBet).coerceAtLeast(0); fx(Fx.CHIP) } }
     fun repeatBet() { if (canBet) { bet = store.lastBet.coerceAtMost(minOf(maxBet, bankroll)); fx(Fx.CHIP) } }
 
     /** Side bets step through off, 1, 2 and 5 table minimums. */
     fun cyclePP() { if (canBet) { ppBet = nextSide(ppBet); fx(Fx.CHIP) } }
     fun cycleTP() { if (canBet) { tpBet = nextSide(tpBet); fx(Fx.CHIP) } }
+    fun cycleLL() { if (canBet) { llBet = nextSide(llBet); fx(Fx.CHIP) } }
+    fun cycleNC() { if (canBet) { ncBet = nextSide(ncBet); fx(Fx.CHIP) } }
+    fun callNC(i: Int) { if (canBet) { ncCall = i.coerceIn(0, 2); fx(Fx.CHIP) } }
+    val miniTotal: Int get() = llBet + ncBet
+
+    private fun grantPower(reason: String) {
+        if (power.sum() >= 6) return
+        val i = rnd.nextInt(PowerUp.entries.size)
+        power[i] = power[i] + 1; store.setPowerUp(i, power[i])
+        perk("Power-up: ${PowerUp.entries[i].label}", reason)
+    }
+
+    fun usePower(p: PowerUp) {
+        val i = p.ordinal
+        if (power[i] <= 0) return
+        val ok = when (p) {
+            PowerUp.PEEK -> !busy && gs.phase == Phase.PLAYER && peeked == null && gs.dealerCards.size >= 2
+            PowerUp.REFUND -> !armedRefund && (canBet || (!busy && gs.phase == Phase.INSURANCE))
+            PowerUp.COVER -> !armedCover && (canBet || (!busy && gs.phase == Phase.PLAYER))
+        }
+        if (!ok) return
+        power[i] = power[i] - 1; store.setPowerUp(i, power[i])
+        fx(Fx.CHIP)
+        when (p) {
+            PowerUp.PEEK -> { peeked = gs.dealerCards[1]; say(DEALER, "Fine, have a look.") }
+            PowerUp.REFUND -> armedRefund = true
+            PowerUp.COVER -> armedCover = true
+        }
+    }
     private fun nextSide(cur: Int): Int {
         val m = settings.tableMin
         val steps = listOf(0, m, m * 2, m * 5)
         val n = steps[(steps.indexOf(cur).coerceAtLeast(0) + 1) % steps.size]
-        return if (n + bet > bankroll) 0 else n
+        return if (n + bet + ppBet + tpBet + llBet + ncBet - cur > bankroll) 0 else n
     }
 
     private fun clearTableForBet() { roundOver = false; banner = null }
@@ -445,7 +497,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         viewModelScope.launch {
             // The dealer sweeps up last round's cards first.
             if (roundOver && dealtOnce && !instant && gs.dealerCards.isNotEmpty()) { sweeping = true; fx(Fx.DEAL); delay(520) }
-            clearTableForBet(); tpResult = null; tpNet = 0; payouts.clear()
+            clearTableForBet(); tpResult = null; tpNet = 0; llResult = null; llNet = 0; ncResult = null; ncNet = 0; peeked = null; payouts.clear()
             life.planBets(game.upcomingTrueCount())
             peekPending = false
             if (life.shuffleUpNow) {
@@ -470,6 +522,10 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             val pp = if (settings.sideBets && stake > 0) ppBet.coerceAtMost(bankroll - stake) else 0
             val tp = if (settings.sideBets && stake > 0 && tpBet > 0 && bankroll - stake - pp >= tpBet) tpBet else 0
             if (tp > 0) game.tip(tp)
+            val ll = if (settings.sideBets && stake > 0 && llBet > 0 && bankroll - stake - pp - tp - llBet >= 0) llBet else 0
+            val nc = if (settings.sideBets && stake > 0 && ncBet > 0 && bankroll - stake - pp - tp - ll - ncBet >= 0) ncBet else 0
+            if (ll > 0) game.tip(ll)
+            if (nc > 0) game.tip(nc)
             val before = game.state().bankroll
             game.deal(stake, pp)
             dealtOnce = true
@@ -481,6 +537,20 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
                 tpNet = if (r == null) -tp else tp * r.second
                 tpResult = r?.first ?: "No 21+3"
                 if (r != null) game.resetBankroll(game.state().bankroll + tp * (r.second + 1))
+            }
+            if (ll > 0) {
+                val h = gs.hands[0]
+                val r = LuckyLadies.evaluate(h.cards[0], h.cards[1])
+                llNet = if (r == null) -ll else ll * r.second
+                llResult = r?.first ?: "No Lucky Ladies"
+                if (r != null) game.resetBankroll(game.state().bankroll + ll * (r.second + 1))
+            }
+            if (nc > 0) {
+                val first = gs.hands[0].cards[0]
+                val r = NextCard.payout(ncCall, first, nc)
+                ncNet = if (r == null) -nc else r.second
+                ncResult = r?.first ?: "Missed: ${first.rank.label}"
+                if (r != null) game.resetBankroll(game.state().bankroll + nc + r.second)
             }
             if (gs.shuffledThisRound || game.reshuffledByMachine) shuffleAnim()
             shown = gs.roundStartSeq
@@ -615,6 +685,25 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         }
     }
 
+    /** Refunds from armed power-ups, then maybe a new power-up as a reward. Every credit is counted in [roundExtras]. */
+    private fun settlePowerUps(g: GameState, handNet: Int, dealerBj: Boolean, bj: Boolean) {
+        var back = 0
+        if (armedRefund && dealerBj && handNet < 0) { back += -handNet; perk("Refund used", "The dealer had blackjack. Your bet came back.") }
+        if (armedCover) {
+            val lost = g.results.filter { it.outcome == Outcome.BUST }.sumOf { -it.net }
+            if (lost > 0) { back += lost; perk("Bust cover used", "You busted. Your bet came back.") }
+        }
+        if (back > 0) { credit(back); roundExtras += back }
+        armedRefund = false; armedCover = false; peeked = null
+        store.powerHands = store.powerHands + 1
+        val doubledWin = g.hands.zip(g.results).any { (h, r) -> h.doubled && r.net > 0 }
+        when {
+            bj -> grantPower("A blackjack earned you a power-up.")
+            store.powerHands % 10 == 0 -> grantPower("Ten hands played. Here's a power-up.")
+            doubledWin && rnd.nextInt(100) < 50 -> grantPower("A winning double earned you a power-up.")
+        }
+    }
+
     private fun finishRound() {
         val g = gs
         bankroll = game.state().bankroll
@@ -623,8 +712,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         saveShoe()
         val watching = g.hands.isEmpty()
         val handNet = g.results.sumOf { it.net }
-        val net = handNet + g.insuranceNet + (g.perfectPairsNet ?: 0) + tpNet
-        val wagered = g.hands.sumOf { it.bet } + g.insuranceBet + g.perfectPairsBet + (if (tpResult != null) tpBet else 0)
+        val net = handNet + g.insuranceNet + (g.perfectPairsNet ?: 0) + tpNet + llNet + ncNet
+        val wagered = g.hands.sumOf { it.bet } + g.insuranceBet + g.perfectPairsBet + (if (tpResult != null) tpBet else 0) + (if (llResult != null) llBet else 0) + (if (ncResult != null) ncBet else 0)
         val wins = g.results.count { it.outcome == Outcome.WIN || it.outcome == Outcome.BLACKJACK }
         val losses = g.results.count { it.outcome == Outcome.LOSE || it.outcome == Outcome.BUST || it.outcome == Outcome.SURRENDER }
         val pushes = g.results.count { it.outcome == Outcome.PUSH }
@@ -637,7 +726,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             net = net, wagered = wagered, wins = wins, losses = losses, pushes = pushes, blackjack = bj,
             doubledWin = g.hands.zip(g.results).any { (h, r) -> h.doubled && r.net > 0 },
             split = split, splitBothWon = split && g.results.all { it.net > 0 },
-            sideWin = (g.perfectPairsNet ?: 0) > 0 || tpNet > 0,
+            sideWin = (g.perfectPairsNet ?: 0) > 0 || tpNet > 0 || llNet > 0 || ncNet > 0,
             fiveCardWin = g.hands.zip(g.results).any { (h, r) -> h.cards.size >= 5 && r.net > 0 },
             dealerBust = dealerBust, bankrollAfter = bankroll, maxBetSeen = g.hands.maxOfOrNull { it.bet } ?: 0,
         )
@@ -646,6 +735,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (newOnes.isNotEmpty()) { earned = earned + newOnes.map { it.id }; store.achievements = earned; toasts.addAll(newOnes) }
 
         if (!watching) funAfterRound(handNet, net, wins)
+        if (!watching) settlePowerUps(g, handNet, dealerBj, bj)
 
         val first = g.results.firstOrNull()
         val title = when {
@@ -691,6 +781,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (bet > bankroll) bet = (bankroll / settings.tableMin * settings.tableMin).coerceAtLeast(0)
         if (ppBet + bet > bankroll) ppBet = 0
         if (tpBet + ppBet + bet > bankroll) tpBet = 0
+        if (llBet + ncBet + tpBet + ppBet + bet > bankroll) { llBet = 0; ncBet = 0 }
         shiftRounds++
         busy = false
         eventsJob = viewModelScope.launch { play(events) }
@@ -807,7 +898,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             game = newGame().also { it.resetBankroll(bankroll) }
             gs = game.state(); shown = 0; countRun = game.shoe.runningCount; roundSeats = emptyList(); roundOver = false; banner = null
             life.unit = n.tableMin; life.clearPitBoss(); pit = null
-            if (n.tableMin != old.tableMin) { bet = n.tableMin.coerceAtMost(bankroll); ppBet = 0; tpBet = 0 }
+            if (n.tableMin != old.tableMin) { bet = n.tableMin.coerceAtMost(bankroll); ppBet = 0; tpBet = 0; llBet = 0; ncBet = 0 }
             if (n.tableMin != old.tableMin) {
                 val t = Tiers.forMin(n.tableMin)
                 life.exclude = Tiers.excluded(t)

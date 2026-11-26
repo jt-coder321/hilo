@@ -162,7 +162,7 @@ private fun OptionsTab(vm: CasualViewModel) {
     Toggle("Card count", s.showCount, "Shows the Hi-Lo running and true count in the top right corner. The count keeps going for each room, even after you leave. Watch sits a round out so you can count without a bet.") { vm.update(s.copy(showCount = it)) }
     Toggle("Hint button", s.hints, "Shows a Hint button that suggests the basic strategy play. Off by default.") { vm.update(s.copy(hints = it)) }
     Toggle("Offer insurance", s.offerInsurance, "When the dealer shows an ace.") { vm.update(s.copy(offerInsurance = it)) }
-    Text("Just Play has no quizzes and no coaching. The count is off unless you turn it on. Your training settings are separate and unchanged.", fontSize = 12.sp, color = Cream.copy(alpha = 0.65f))
+    Text("Power-ups and mini games are casual only. They never touch your training stats. Just Play has no quizzes and no coaching. The count is off unless you turn it on. Your training settings are separate and unchanged.", fontSize = 12.sp, color = Cream.copy(alpha = 0.65f))
 }
 
 @Composable

@@ -72,6 +72,16 @@ class CasualStore(context: Context?) {
         else mem.keys.filter { it.startsWith("shoe_") }.toList().forEach { mem.remove(it) }
     }
 
+    /** How many of each power-up you hold, in order of [com.hilotrainer.engine.PowerUp]. */
+    fun powerUps(): List<Int> = List(3) { int("pu_$it", 0) }
+    fun setPowerUp(i: Int, n: Int) = put({ putInt("pu_$i", n) }, "pu_$i" to n)
+    var powerSeeded: Boolean
+        get() = bool("pu_seeded", false)
+        set(v) = put({ putBoolean("pu_seeded", v) }, "pu_seeded" to v)
+    var powerHands: Int
+        get() = int("pu_hands", 0)
+        set(v) = put({ putInt("pu_hands", v) }, "pu_hands" to v)
+
     var lastBet: Int
         get() = int("lastBet", 0)
         set(v) = put({ putInt("lastBet", v) }, "lastBet" to v)

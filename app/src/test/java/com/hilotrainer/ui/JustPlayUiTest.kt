@@ -13,6 +13,7 @@ import com.hilotrainer.engine.Phase
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -302,6 +303,106 @@ abstract class JustPlayShotBase {
         v.addChip(25)
         assertTrue(!v.settings.showCount)
         shoot("jp-count-off") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun powerUpsAreEarnedKeptAndSpent() {
+        val store = CasualStore(null)
+        val v = CasualViewModel(store, Random(5)).apply { instant = true }
+        assertEquals(listOf(1, 1, 1), v.power.toList())
+        // Peek only works during your hand and shows the real hole card.
+        v.usePower(com.hilotrainer.engine.PowerUp.PEEK)
+        assertEquals(1, v.power[0])
+        var peeked = false
+        repeat(40) {
+            if (peeked) return@repeat
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            if (v.gs.phase == Phase.PLAYER) {
+                v.usePower(com.hilotrainer.engine.PowerUp.PEEK)
+                assertEquals(v.gs.dealerCards[1], v.peeked)
+                assertEquals(0, v.power[0])
+                peeked = true
+            }
+            while (v.gs.phase == Phase.PLAYER) v.act(Action.STAND)
+            assertNull(v.peeked)
+        }
+        assertTrue(peeked)
+        assertEquals(0, CasualViewModel(store, Random(6)).apply { instant = true }.power[0])
+        // Armed or not, a power-up never makes the books wrong.
+        assertTrue(v.power.sum() <= 6)
+    }
+
+    @Test fun bustCoverReturnsTheBetAndTheLedgerStaysHonest() {
+        var covered = 0
+        repeat(60) { seed ->
+            val v = casualVm(300 + seed)
+            val before = v.bankroll
+            v.usePower(com.hilotrainer.engine.PowerUp.COVER)
+            assertTrue(v.armedCover)
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            while (v.gs.phase == Phase.PLAYER && v.gs.hands.all { it.total <= 21 }) v.act(Action.HIT)
+            if (v.gs.results.any { it.outcome == com.hilotrainer.engine.Outcome.BUST }) {
+                covered++
+                assertEquals(before, v.bankroll)
+            }
+            assertEquals(before + v.gs.results.sumOf { it.net } + v.roundExtras, v.bankroll)
+            assertTrue(!v.armedCover)
+        }
+        assertTrue("never busted", covered > 3)
+    }
+
+    @Test fun miniGameBetsAreSettledOnTheCards() {
+        val v = casualVm(61)
+        v.cycleLL(); v.cycleNC(); v.callNC(2)
+        assertTrue(v.miniTotal > 0)
+        repeat(60) {
+            if (v.broke) v.rebuy()
+            if (v.miniTotal == 0) { v.cycleLL(); v.cycleNC() }
+            val before = v.bankroll
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            while (v.gs.phase == Phase.PLAYER) v.act(v.gs.basicAdvice!!.action)
+            assertEquals(before + v.banner!!.amount + v.roundExtras, v.bankroll)
+            assertEquals(v.bankroll, v.store.bankroll)
+        }
+    }
+
+    @Test fun powerUpsAndMiniGamesOnScreen() {
+        val v = table(41)
+        v.addChip(25)
+        v.cycleLL(); v.cycleNC()
+        shoot("jp-powerups-bet") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun miniGamesDialog() {
+        val v = table(42)
+        v.addChip(25)
+        v.cycleLL(); v.callNC(1); v.cycleNC()
+        v.miniOpen = true
+        shoot("jp-minigames") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun peekShowsTheHoleCard() {
+        val v = table(43, CasualSettings(showCount = true))
+        v.addChip(25)
+        repeat(30) { seed ->
+            if (v.peeked != null) return@repeat
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            if (v.gs.phase == Phase.PLAYER) { v.usePower(com.hilotrainer.engine.PowerUp.PEEK); if (v.peeked == null) while (v.gs.phase == Phase.PLAYER) v.act(Action.STAND) }
+            else if (v.gs.phase != Phase.PLAYER && v.gs.phase != Phase.INSURANCE) Unit
+        }
+        shoot("jp-peek") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun countWithBonusAndPit() {
+        val v = table(44, CasualSettings(showCount = true))
+        v.addChip(25)
+        repeat(6) { playOne(v) }
+        v.pitForTest(3)
+        v.sayForTest(CasualViewModel.PIT, "Sir, you're welcome to play any other game.")
+        shoot("jp-count-pit") { JustPlayScreen(v) {} }
     }
 
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }

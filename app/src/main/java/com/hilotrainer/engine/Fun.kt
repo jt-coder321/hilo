@@ -114,3 +114,43 @@ object FunTalk {
         "I read you should never take insurance." to "I read a lot of things.",
     )
 }
+
+/** Casual side bet: your first two cards total 20. Pays by how well they match. */
+object LuckyLadies {
+    const val ANY_20 = 4; const val SUITED_20 = 9; const val MATCHED_20 = 19; const val QUEENS_OF_HEARTS = 125
+
+    /** The result and its odds, or null when the two cards do not make 20. */
+    fun evaluate(a: Card, b: Card): Pair<String, Int>? {
+        if (a.rank.value + b.rank.value != 20) return null
+        if (a.rank == Rank.QUEEN && b.rank == Rank.QUEEN && a.suit == Suit.HEARTS && b.suit == Suit.HEARTS) return "Queens of hearts" to QUEENS_OF_HEARTS
+        if (a.rank == b.rank && a.suit == b.suit) return "Matched 20" to MATCHED_20
+        if (a.suit == b.suit) return "Suited 20" to SUITED_20
+        return "Any 20" to ANY_20
+    }
+}
+
+/** Casual side bet: call your first card as low (2 to 6), a seven, or high (9 to ace). Low pays 3 to 2 so winnings are halved up. */
+object NextCard {
+    val CALLS = listOf("Low", "Seven", "High")
+    val BLURB = listOf("2 to 6 pays 3 to 2", "A seven pays 10 to 1", "9 to ace pays 1 to 1")
+
+    /** Winnings in tenths of the stake, or null on a miss. Callers divide by ten. */
+    fun tenths(call: Int, card: Card): Int? {
+        val v = card.rank.value
+        return when (call) {
+            0 -> if (v in 2..6) 15 else null
+            1 -> if (v == 7) 100 else null
+            else -> if (v >= 9) 10 else null
+        }
+    }
+
+    fun payout(call: Int, card: Card, stake: Int): Pair<String, Int>? =
+        tenths(call, card)?.let { "${CALLS[call]} ${card.rank.label}" to stake * it / 10 }
+}
+
+/** One use perks you earn at the table and spend when you choose. Just Play only, they never touch training. */
+enum class PowerUp(val label: String, val short: String, val desc: String) {
+    PEEK("Hole peek", "Peek", "Shows the dealer's hole card. Use it during your hand."),
+    REFUND("Dealer blackjack refund", "Refund", "If the dealer has blackjack this round, your lost bet comes back. Arm it before the deal or at insurance."),
+    COVER("Bust cover", "Cover", "If you bust this round, the bet on that hand comes back. Arm it before the deal or during your hand."),
+}

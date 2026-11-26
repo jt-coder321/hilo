@@ -88,6 +88,22 @@ class JustPlayTest {
         assertNotNull(line)
     }
 
+    @Test fun luckyLadiesAndNextCardPayOutByTheTable() {
+        fun card(r: Rank, s: Suit) = Card(r, s)
+        assertEquals("Any 20" to 4, LuckyLadies.evaluate(card(Rank.KING, Suit.CLUBS), card(Rank.JACK, Suit.HEARTS)))
+        assertEquals("Suited 20" to 9, LuckyLadies.evaluate(card(Rank.KING, Suit.CLUBS), card(Rank.TEN, Suit.CLUBS)))
+        assertEquals("Matched 20" to 19, LuckyLadies.evaluate(card(Rank.KING, Suit.CLUBS), card(Rank.KING, Suit.CLUBS)))
+        assertEquals("Queens of hearts" to 125, LuckyLadies.evaluate(card(Rank.QUEEN, Suit.HEARTS), card(Rank.QUEEN, Suit.HEARTS)))
+        assertEquals("Any 20" to 4, LuckyLadies.evaluate(card(Rank.ACE, Suit.SPADES), card(Rank.NINE, Suit.HEARTS)))
+        assertNull(LuckyLadies.evaluate(card(Rank.KING, Suit.CLUBS), card(Rank.NINE, Suit.CLUBS)))
+        assertEquals(150, NextCard.payout(0, card(Rank.FIVE, Suit.CLUBS), 100)!!.second)
+        assertNull(NextCard.payout(0, card(Rank.SEVEN, Suit.CLUBS), 100))
+        assertEquals(1000, NextCard.payout(1, card(Rank.SEVEN, Suit.CLUBS), 100)!!.second)
+        assertEquals(100, NextCard.payout(2, card(Rank.ACE, Suit.CLUBS), 100)!!.second)
+        assertNull(NextCard.payout(2, card(Rank.EIGHT, Suit.CLUBS), 100))
+        assertEquals(3, PowerUp.entries.size)
+    }
+
     @Test fun talkAvoidsRepeats() {
         TableTalk.resetMemory()
         val r = Random(3)
