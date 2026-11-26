@@ -54,6 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hilotrainer.engine.PlayerHeat
+import com.hilotrainer.engine.TableStreak
 import com.hilotrainer.engine.Tiers
 import com.hilotrainer.engine.PowerUp
 import com.hilotrainer.engine.Rival
@@ -308,6 +310,49 @@ private fun signed(v: Double, digits: Int): String {
 }
 
 /** Power-ups you hold, in a thin strip above the buttons. Casual only: they never touch training. */
+/** The table's streak and the heat you are drawing, one slim strip under the felt. Casual only, and never a sign of what the next card is. */
+@Composable
+fun MeterRow(vm: CasualViewModel) {
+    val lv = vm.streakLevel
+    val streakCol = when { lv >= 1 -> Color(0xFFFF8A3D); lv <= -1 -> Color(0xFF6FB7FF); else -> Cream.copy(alpha = 0.7f) }
+    val heat = vm.heatLevel
+    val heatCol = when { heat >= 9 -> BadRed; heat >= 7 -> Color(0xFFFF8A3D); heat >= 4 -> Gold; else -> Cream.copy(alpha = 0.7f) }
+    Row(
+        Modifier.fillMaxWidth().background(Color(0xFF241509)).padding(horizontal = 10.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.semantics { contentDescription = "Table ${TableStreak.label(lv)}. ${TableStreak.note(lv)}" },
+            horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("TABLE", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
+            Text(TableStreak.label(lv), fontSize = 12.sp, fontWeight = FontWeight.Black, color = streakCol)
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (i in -2..2) {
+                    if (i == 0) continue
+                    val on = (lv > 0 && i in 1..lv) || (lv < 0 && i in lv..-1)
+                    Box(Modifier.size(width = 8.dp, height = 8.dp).clip(RoundedCornerShape(2.dp)).background(if (on) streakCol else Color(0x22FFFFFF)))
+                }
+            }
+        }
+        Row(
+            Modifier.weight(1f).semantics { contentDescription = "Pit boss heat $heat of ${PlayerHeat.MAX}. Big bets and big wins raise it. Small bets, losses and tips lower it." },
+            horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("HEAT", fontSize = 10.sp, letterSpacing = 1.sp, color = Gold)
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                repeat(PlayerHeat.MAX) { i -> Box(Modifier.size(width = 7.dp, height = 8.dp).clip(RoundedCornerShape(2.dp)).background(if (i < heat) heatCol else Color(0x22FFFFFF))) }
+            }
+            if (vm.cooloff > 0) Text("Rail ${vm.cooloff}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BadRed)
+            else if (vm.flatLeft > 0) Text("Small bets ${vm.flatLeft}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Gold)
+        }
+        if (vm.canTip) Text(
+            "Tip ${money(vm.tipCost)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(Gold).clickable { vm.tipDealer() }.semantics { contentDescription = "Tip the dealer to cool the heat" }.padding(horizontal = 10.dp, vertical = 3.dp),
+        )
+    }
+}
+
 @Composable
 fun PowerRow(vm: CasualViewModel) {
     val any = vm.power.sum() > 0 || vm.armedRefund || vm.armedCover

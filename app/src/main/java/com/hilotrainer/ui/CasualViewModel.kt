@@ -9,6 +9,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hilotrainer.engine.Achievement
+import com.hilotrainer.engine.PlayerHeat
+import com.hilotrainer.engine.PitMove
+import com.hilotrainer.engine.TableStreak
 import com.hilotrainer.engine.Achievements
 import com.hilotrainer.engine.Action
 import com.hilotrainer.engine.Archetype
@@ -172,6 +175,28 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     var dealerMood by mutableStateOf(Mood.NEUTRAL); private set
     private var shiftRounds = 0
     var pit by mutableStateOf<PitState?>(null); private set
+
+    // Table streak (cosmetic) and the heat you draw from the pit boss (casual only).
+    private val streak = TableStreak()
+    var streakLevel by mutableIntStateOf(0); private set
+    private val heat = PlayerHeat()
+    var heatLevel by mutableIntStateOf(0); private set
+    var cooloff by mutableIntStateOf(0); private set
+    var flatLeft by mutableIntStateOf(0); private set
+    private var pendingMove = PitMove.NONE
+    private fun syncHeat() { heatLevel = heat.level; cooloff = heat.cooloff; flatLeft = heat.flatLeft; streakLevel = streak.level }
+    private fun resetHeat() { streak.clear(); heat.reset(); pendingMove = PitMove.NONE; syncHeat() }
+
+    /** Tip the dealer: small cost, cools the heat. Acting the part. */
+    val tipCost: Int get() = settings.tableMin * 2
+    val canTip: Boolean get() = canBet && heat.level >= 3 && bankroll >= tipCost + settings.tableMin
+    fun tipDealer() {
+        if (!canTip) return
+        game.tip(tipCost); bankroll = game.state().bankroll; store.bankroll = bankroll
+        heat.tip(); syncHeat(); fx(Fx.CHIP)
+        say(DEALER, "Thank you, sir. Much appreciated.")
+        if (bet > bankroll) bet = (bankroll / settings.tableMin * settings.tableMin).coerceAtLeast(0)
+    }
     var shuffling by mutableStateOf(false); private set
     /** True while the dealer looks at the hole card to check for blackjack. */
     var peeking by mutableStateOf(false); private set
@@ -463,7 +488,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     private val cardMs: Long get() = (dealer.cardMs * when (settings.speed) { 0 -> 1.45; 2 -> 0.6; else -> 1.0 }).toLong()
 
     // Betting
-    val maxBet: Int get() = settings.tableMin * 100
+    val maxBet: Int get() = if (flatLeft > 0) PlayerHeat.flatCap(settings.tableMin) else settings.tableMin * 100
     val canBet: Boolean get() = !busy && (gs.phase == Phase.BETTING || gs.phase == Phase.ROUND_OVER)
 
     fun addChip(v: Int) {
@@ -568,6 +593,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     private fun startRound(stake: Int) {
         if (!canBet) return
         if (stake != 0 && (stake < settings.tableMin || stake > bankroll)) return
+        if (stake != 0 && (cooloff > 0 || stake > maxBet)) return
         eventsJob?.cancel(); syncSeats()
         if (!dareOn) dare = null
         busy = true; hint = null
@@ -867,6 +893,23 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             rnd.nextInt(100) < 40 -> say(DEALER, DealerCalls.result(g.dealerCards))
         }
 
+        // Table streak and pit heat. Both are flavor read from what just happened; neither touches the shoe except an early shuffle.
+        run {
+            val all = g.results.map { it.net } + g.botResults.map { it.net }
+            val prev = streak.level
+            streak.record(all.count { it > 0 }, all.count { it < 0 })
+            if (streak.level != prev && kotlin.math.abs(streak.level) >= 1) {
+                val pool = when (streak.level) { 2 -> TableStreak.hotTalk; 1 -> TableStreak.warmTalk; -1 -> TableStreak.coolTalk; else -> TableStreak.coldTalk }
+                val seats = life.seats.indices.filter { life.seats[it] != null }
+                if (seats.isNotEmpty() && rnd.nextInt(100) < 70) say(seats[rnd.nextInt(seats.size)], pool[rnd.nextInt(pool.size)])
+            }
+            val stake = if (watching) 0 else g.hands.sumOf { it.bet }
+            pendingMove = heat.afterRound(stake, handNet, settings.tableMin, rnd)
+            if (pendingMove == PitMove.FLAT_BET && bet > PlayerHeat.flatCap(settings.tableMin)) bet = PlayerHeat.flatCap(settings.tableMin)
+            if (pendingMove == PitMove.ASKED_TO_LEAVE) { bet = 0; ppBet = 0; tpBet = 0; llBet = 0; ncBet = 0 }
+            syncHeat()
+        }
+
         // The other players react, then the table changes.
         val nets = HashMap<Int, Int>(); val outs = HashMap<Int, Outcome>()
         roundSeats.forEachIndexed { i, (seat, _) -> g.botResults.getOrNull(i)?.let { nets[seat] = it.net; outs[seat] = it.outcome } }
@@ -950,12 +993,40 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             }
             if (!instant) delay(650)
         }
-        if (life.pitWatching < 0 && pit != null) {
+        if (life.pitWatching < 0 && pit != null && !heat.watched) {
             if (!instant) delay(1200)
             if (life.pitWatching < 0) { if (events.any { it is TableEvent.PitAct || it is TableEvent.PitComp }) say(PIT, TableTalk.pit("leaving", rnd)); pit = null }
         }
+        val mv = pendingMove; pendingMove = PitMove.NONE
+        if (mv != PitMove.NONE) playerPit(mv)
         seatView = life.seats.toList()
         if (shiftRounds >= CasualDealers.SHIFT) changeDealer()
+    }
+
+    /** The pit boss deals with you: a look, a cap on bets, a shuffle, or a few hands on the rail. */
+    private suspend fun playerPit(mv: PitMove) {
+        pit = PitState(2, k())
+        if (!instant) delay(1100)
+        when (mv) {
+            PitMove.WATCH -> say(PIT, TableTalk.pit("heat_watch", rnd))
+            PitMove.RELAX -> say(PIT, TableTalk.pit("heat_relax", rnd))
+            PitMove.FLAT_BET -> {
+                say(PIT, TableTalk.pit("heat_flat", rnd))
+                perk("Small bets only", "Bets are capped at ${money(PlayerHeat.flatCap(settings.tableMin))} for ${PlayerHeat.FLAT_ROUNDS} hands.")
+            }
+            PitMove.SHUFFLE_UP -> {
+                say(PIT, TableTalk.pit("heat_shuffle", rnd)); life.shuffleUpNow = true; dealerReact(Mood.NERVOUS)
+                perk("Early shuffle", "The shoe is reshuffled next hand, so the count starts over.")
+            }
+            PitMove.ASKED_TO_LEAVE -> {
+                say(PIT, TableTalk.pit("heat_leave", rnd)); dealerReact(Mood.NERVOUS)
+                perk("Cooling off", "Watch ${PlayerHeat.COOLOFF} hands from the rail. Tipping and small bets keep the heat down later.")
+            }
+            PitMove.RELEASE -> say(PIT, TableTalk.pit("heat_release", rnd))
+            PitMove.NONE -> {}
+        }
+        if (!instant) delay(900)
+        if (life.pitWatching < 0 && !heat.watched) { if (mv != PitMove.RELAX && mv != PitMove.RELEASE) say(PIT, TableTalk.pit("leaving", rnd)); pit = null }
     }
 
     private suspend fun changeDealer() {
@@ -1002,7 +1073,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             if (n.rules != old.rules) store.clearShoes()
             game = newGame().also { it.resetBankroll(bankroll) }
             gs = game.state(); shown = 0; countRun = game.shoe.runningCount; roundSeats = emptyList(); roundOver = false; banner = null
-            life.unit = n.tableMin; life.clearPitBoss(); pit = null
+            life.unit = n.tableMin; life.clearPitBoss(); pit = null; resetHeat()
             if (n.tableMin != old.tableMin) { bet = n.tableMin.coerceAtMost(bankroll); ppBet = 0; tpBet = 0; llBet = 0; ncBet = 0 }
             if (n.tableMin != old.tableMin) {
                 val t = Tiers.forMin(n.tableMin)
@@ -1025,6 +1096,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     }
 
     /** Test helper: seat a named player. */
+    internal fun heatForTest(level: Int) { heat.force(level); syncHeat() }
+    internal fun streakForTest(results: List<Int>) { streak.clear(); results.forEach { streak.record(maxOf(it, 0), maxOf(-it, 0)) }; syncHeat() }
     internal fun seatForTest(seat: Int, name: String, heat: Int = 0) {
         val who = com.hilotrainer.engine.Cast.byName(name)
         life.seats[seat] = Seat(1000L + seat, who, 50 * settings.tableMin, 50 * settings.tableMin, who.baseUnits * settings.tableMin, plan = 99, heat = heat)

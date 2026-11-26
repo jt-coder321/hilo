@@ -103,6 +103,12 @@ object TableTalk {
         "leave" to listOf("Sir, you're welcome to play any other game. Not blackjack.", "We're going to have to ask you to stop playing blackjack tonight.", "Your action's too good for us. Cash out, please."),
         "comp" to listOf("Dinner's on us tonight.", "Can I get you anything? Room upgrade?", "Show front row seats, on the house.", "Whatever you're drinking, it's on us."),
         "leaving" to listOf("Thanks, everyone. Carry on.", "Enjoy your night, folks."),
+        "heat_watch" to listOf("Those are some big chips. Mind if I stand here a minute?", "Big money at this table. I like to say hello.", "I'll just keep you company for a few hands.", "Lot of action over here. Everything all right?", "Evening. I like to see who's winning."),
+        "heat_relax" to listOf("Looks like a friendly game. Carry on.", "All good here. Enjoy yourself.", "Just checking in. You're fine.", "Nice and easy. That's what I like to see."),
+        "heat_flat" to listOf("Tell you what, keep it to small bets for a little while.", "We cap the bets for a few hands. House rule tonight.", "Bets stay at the low end for now, friend.", "Let's keep it friendly. Smaller bets, please."),
+        "heat_shuffle" to listOf("Dealer, let's get a new shoe going.", "That shoe's had a long run. Shuffle it up.", "Fresh cards, please. I don't like that shoe.", "Shuffle up, dealer. Right now."),
+        "heat_leave" to listOf("I'm going to ask you to step away from the table for a bit. Have a drink.", "Take a break, friend. Come back when you've cooled off.", "That's enough for now. The table's closed to you for a few hands.", "Go get some air. We'll see you in a little while."),
+        "heat_release" to listOf("You're welcome back. Keep it friendly.", "All right, you're good. Play on.", "Back to normal. Good luck.", "Fine. Carry on, and no funny business."),
     )
 
     private val recent = ArrayDeque<String>()

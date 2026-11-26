@@ -493,6 +493,54 @@ abstract class JustPlayShotBase {
         shoot("jp-sidebets-panel") { JustPlayScreen(v) {} }
     }
 
+    @Test fun streakIsCosmeticAndLeavesTheShoeAlone() {
+        val v = casualVm(61)
+        v.addChip(25); playOne(v)
+        val dealt = v.gs.cardsDealt; val run = v.gs.runningCount; val total = v.gs.totalCards; val count = v.countRun
+        v.streakForTest(listOf(1, 1, 1, 1, 1, 1)); assertEquals(2, v.streakLevel)
+        v.streakForTest(listOf(-1, -1, -1, -1, -1, -1)); assertEquals(-2, v.streakLevel)
+        assertEquals(dealt, v.gs.cardsDealt); assertEquals(run, v.gs.runningCount); assertEquals(total, v.gs.totalCards); assertEquals(count, v.countRun)
+    }
+
+    @Test fun bigBettingDrawsThePitBossAndCoolingOffBlocksBets() {
+        val v = casualVm(33, CasualSettings(tableMin = 10))
+        listOf(0 to "Hank", 1 to "Grandma Dot", 2 to "Brenda", 3 to "Victor").forEach { (i, n) -> v.seatForTest(i, n) }
+        v.heatForTest(5)
+        var rail = false
+        var rounds = 0
+        while (rounds++ < 40 && !rail) {
+            if (v.bankroll < 500) v.rebuy()
+            v.clearBet(); repeat(5) { v.addChip(100) }
+            if (v.flatLeft > 0) { assertTrue(v.maxBet <= 50); v.clearBet(); v.addChip(10) }
+            playOne(v)
+            rail = v.cooloff > 0
+        }
+        assertTrue("never sent to the rail", rail)
+        val before = v.bankroll; val seq = v.gs.roundStartSeq
+        v.clearBet(); v.addChip(10)
+        v.deal()
+        assertEquals(before, v.bankroll); assertEquals(seq, v.gs.roundStartSeq)
+        val left = v.cooloff
+        repeat(left) { v.watch() }
+        assertEquals(0, v.cooloff)
+        v.clearBet(); v.addChip(10); v.deal()
+        assertTrue(v.gs.roundStartSeq != seq)
+    }
+
+    @Test fun heatAndStreakStrip() {
+        val v = table(52, CasualSettings(chatStyle = 2, tableMin = 10))
+        v.streakForTest(listOf(1, 1, 1, 1, 1, 1)); v.heatForTest(8)
+        v.addChip(100)
+        shoot("jp-heat") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun heatStripShowsTheRailAndCold() {
+        val v = table(53, CasualSettings(chatStyle = 2, tableMin = 10))
+        v.streakForTest(listOf(-1, -1, -1, -1, -1, -1)); v.heatForTest(9)
+        v.addChip(10)
+        shoot("jp-cold") { JustPlayScreen(v) {} }
+    }
+
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
 
     @Test fun longSessionWithNewTalkStaysHonest() {

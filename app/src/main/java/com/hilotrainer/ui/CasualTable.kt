@@ -144,6 +144,7 @@ fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().themedFelt(s.theme)) {
                 TableArea(vm, maxWidth, maxHeight) { wheelOpen = true }
             }
+            MeterRow(vm)
             PowerRow(vm)
             Controls(vm)
         }
@@ -1002,8 +1003,8 @@ private fun Controls(vm: CasualViewModel) {
                         if (vm.bet == 0 && vm.store.lastBet > 0) GoldButton("Rebet", Modifier.weight(0.8f), primary = false) { vm.repeatBet() }
                         else GoldButton("Clear", Modifier.weight(0.8f), enabled = vm.bet > 0, primary = false) { vm.clearBet() }
                         GoldButton("x2", Modifier.weight(0.6f), enabled = vm.bet > 0 && vm.bet * 2 <= vm.bankroll, primary = false) { vm.doubleBet() }
-                        if (vm.settings.showCount) GoldButton("Watch", Modifier.weight(0.8f), primary = false) { vm.watch() }
-                        GoldButton("Deal", Modifier.weight(1.4f), enabled = vm.bet >= vm.settings.tableMin && vm.bet <= vm.bankroll) { vm.deal() }
+                        if (vm.settings.showCount || vm.cooloff > 0) GoldButton("Watch", Modifier.weight(0.8f), primary = false) { vm.watch() }
+                        GoldButton(if (vm.cooloff > 0) "On the rail" else "Deal", Modifier.weight(1.4f), enabled = vm.cooloff == 0 && vm.bet >= vm.settings.tableMin && vm.bet <= vm.bankroll) { vm.deal() }
                     }
                 }
             }
