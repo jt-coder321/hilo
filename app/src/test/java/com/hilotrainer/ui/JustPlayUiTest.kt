@@ -541,6 +541,18 @@ abstract class JustPlayShotBase {
         shoot("jp-cold") { JustPlayScreen(v) {} }
     }
 
+    private fun dealerTalkRound(style: Int, name: String) {
+        val v = table(47, CasualSettings(chatStyle = style))
+        v.addChip(25)
+        playOne(v)
+        v.sayForTest(CasualViewModel.DEALER, "Big money, no whammies! Let's see what the next one brings.")
+        v.sayForTest(1, "Why do I always hit that?")
+        shoot(name) { JustPlayScreen(v) {} }
+    }
+    @Test fun dealerBubbleClearsBannerBubbles() = dealerTalkRound(1, "jp-dealertalk-bubbles")
+    @Test fun dealerBubbleClearsBannerFloating() = dealerTalkRound(4, "jp-dealertalk-float")
+    @Test fun dealerBubbleClearsBannerCaptions() = dealerTalkRound(2, "jp-dealertalk-captions")
+
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
 
     @Test fun longSessionWithNewTalkStaysHonest() {

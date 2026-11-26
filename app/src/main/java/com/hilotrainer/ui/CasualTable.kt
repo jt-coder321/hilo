@@ -303,12 +303,12 @@ private fun TableArea(vm: CasualViewModel, w: Dp, h: Dp, onWheel: () -> Unit) {
 /** Table talk, drawn in the style the player picked. Every style keeps every line readable and avoids overlap. */
 @Composable
 private fun ChatLayer(vm: CasualViewModel, w: Dp, dz: Dp, dCard: Dp, dealerSize: Dp, seatX: (Int) -> Dp, seatY: (Int) -> Dp, youTop: Dp) {
-    val feedTop = dz + dCard * 1.4f + 14.dp + 50.dp
+    val feedTop = dz + dCard * 1.4f + 78.dp
     val fh = (seatY(0) - 6.dp - feedTop).coerceIn(60.dp, 132.dp)
     when (vm.settings.chatStyle) {
         1 -> { BubbleLayer(vm, w, dz, dCard, seatX, seatY, floating = false); BubbleDare(vm, w, feedTop + fh - 46.dp) }
         4 -> { BubbleLayer(vm, w, dz, dCard, seatX, seatY, floating = true); BubbleDare(vm, w, feedTop + fh - 46.dp) }
-        2 -> Captions(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh))
+        2 -> Captions(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh), if (fh < 100.dp) 2 else 3)
         3 -> TableLog(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh))
         else -> ChatFeed(vm, Modifier.offset(w * 0.04f, feedTop).width(w * 0.92f).height(fh))
     }
@@ -332,7 +332,7 @@ private fun layoutBubbles(lines: List<ChatLine>, w: Float, dz: Float, dealerBott
         else -> Anchor(seatX(l.who), seatY(l.who) - 2f, false)
     }
     val out = ArrayList<Placed>()
-    for (l in latest.sortedByDescending { Math.abs(anchor(it).cx - w / 2) }) {
+    for (l in latest.sortedWith(compareByDescending<ChatLine> { it.who == CasualViewModel.DEALER }.thenByDescending { Math.abs(anchor(it).cx - w / 2) })) {
         val a = anchor(l)
         val minor = floating && l.minor
         val cw = if (minor) 6.0f else 6.4f
@@ -359,8 +359,10 @@ private fun layoutBubbles(lines: List<ChatLine>, w: Float, dz: Float, dealerBott
 private fun BubbleLayer(vm: CasualViewModel, w: Dp, dz: Dp, dCard: Dp, seatX: (Int) -> Dp, seatY: (Int) -> Dp, floating: Boolean) {
     val occupied = (0 until SEATS).filter { vm.seatView[it] != null }
     val pw = minOf(300f, w.value * 0.82f)
-    val blocked = if (vm.sidePanelOn) listOf(floatArrayOf((w.value - pw) / 2f, (dz + dCard * 1.4f + 50.dp).value, pw, 18f + vm.sideLines.size * 23f)) else emptyList()
-    val placed = layoutBubbles(vm.chat.toList().filter { !vm.sidePanelOn || it.who != CasualViewModel.DEALER }, w.value, dz.value, (dz + dCard * 1.4f + 8.dp).value, { seatX(it).value }, { seatY(it).value }, (w / 4.6f).value, occupied, floating, blocked)
+    val band = floatArrayOf(w.value * 0.08f, (dz + dCard * 1.4f).value, w.value * 0.84f, 76f)
+    val cards = floatArrayOf(w.value / 2f - dCard.value * 2.2f, dz.value + 4f, dCard.value * 4.6f, dCard.value * 1.4f + 4f)
+    val blocked = listOf(band, cards) + if (vm.sidePanelOn) listOf(floatArrayOf((w.value - pw) / 2f, (dz + dCard * 1.4f + 50.dp).value, pw, 18f + vm.sideLines.size * 23f)) else emptyList()
+    val placed = layoutBubbles(vm.chat.toList().filter { !vm.sidePanelOn || it.who != CasualViewModel.DEALER }, w.value, dz.value, (dz + dCard * 1.4f + 80.dp).value, { seatX(it).value }, { seatY(it).value }, (w / 4.6f).value, occupied, floating, blocked)
     placed.forEach { p -> key(p.l.key) { AnchoredBubble(p, Modifier.offset(p.x.dp, p.y.dp).width(p.w.dp)) } }
 }
 
@@ -421,9 +423,9 @@ private fun ReactionIcon(seed: Int, color: Color, modifier: Modifier) {
 
 /** Film style captions: the last two lines, centered, no boxes. */
 @Composable
-private fun Captions(vm: CasualViewModel, modifier: Modifier) {
+private fun Captions(vm: CasualViewModel, modifier: Modifier, count: Int = 3) {
     val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
-    val lines = vm.chat.toList().takeLast(if (dareShown || vm.sidePanelOn) 1 else 3)
+    val lines = vm.chat.toList().takeLast(if (dareShown || vm.sidePanelOn) 1 else count)
     Column(
         modifier.clip(androidx.compose.ui.graphics.RectangleShape)
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = if (lines.isEmpty()) 0f else 0.32f)))),
@@ -441,7 +443,7 @@ private fun Captions(vm: CasualViewModel, modifier: Modifier) {
                         pushStyle(androidx.compose.ui.text.SpanStyle(color = speakerColor(l.who), fontWeight = FontWeight.Black, letterSpacing = 1.sp, fontSize = 11.sp)); append(l.name.uppercase().ifEmpty { "SOMEONE" }); pop()
                         append("   "); append(l.text)
                     },
-                    fontSize = 15.sp, lineHeight = 19.sp, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, maxLines = 2,
+                    fontSize = 14.sp, lineHeight = 17.sp, color = Color.White, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold, maxLines = 2,
                     style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(Color.Black, Offset(0f, 2f), 8f)),
                     modifier = Modifier.graphicsLayer { alpha = a.value * dim * fade.value },
                 )
