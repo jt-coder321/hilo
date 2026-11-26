@@ -630,6 +630,41 @@ abstract class JustPlayShotBase {
         assertTrue(v.run!!.pack != null)
         shoot("run-starter") { RunScreen(v.store, {}, v) }
     }
+    @Test fun runStartWithRank() {
+        val v = runVm(16); v.store.runXp = 200; v.store.runWins = 1; v.store.runSeen = "sevens,court,ace,wild,tell"; v.store.runGoalsDone = "first,a2"
+        v.leaveRun()
+        shoot("run-start-rank") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runCodex() {
+        val v = runVm(17); v.store.runSeen = "sevens,court,ace,wild,tell,soft,twenty,penny,cut,spotter,sharp,charlie"
+        v.leaveRun(); v.codexOpen = true
+        shoot("run-codex") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runGoals() {
+        val v = runVm(18); v.store.runGoalsDone = "first,a2,a3"
+        v.leaveRun(); v.goalsOpen = true
+        shoot("run-goals") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runBossPrize() {
+        val v = runVm(19, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { forceScore(10_000_000) }
+        v.run!!.let { r ->
+            // Play the first blind, then jump to a boss clear.
+        }
+        val r = com.hilotrainer.engine.Run(com.hilotrainer.engine.StartDeck.STANDARD, Random(5))
+        r.setState(2, 2, 14, 0, false, 5, 200, 0, false)
+        r.startBlind(); r.forceScore(10_000_000)
+        var g = 0
+        while (r.phase == com.hilotrainer.engine.RunPhase.PLAY && g++ < 100) { if (!r.inRound) r.deal(1) else { val a = r.gs.basicAdvice?.action ?: com.hilotrainer.engine.Action.STAND; if (!r.act(a)) r.act(com.hilotrainer.engine.Action.STAND) } }
+        val vm2 = RunVm(CasualStore(null), Random(2)); vm2.run = r
+        shoot("run-bossprize") { RunScreen(vm2.store, {}, vm2) }
+    }
+    @Test fun runEndReward() {
+        val v = runVm(20)
+        v.store.runXp = 40
+        v.mut { lose("Fell 140 short of 250 on the Big Blind of Ante 2.") }
+        shoot("run-end-reward") { RunScreen(v.store, {}, v) }
+    }
     @Test fun runGuide() {
         val v = runVm(15); v.guideOpen = true
         shoot("run-guide") { RunScreen(v.store, {}, v) }

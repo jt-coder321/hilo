@@ -286,10 +286,12 @@ object Bosses {
     )
 }
 
-enum class StartDeck(val label: String, val desc: String, val money: Int, val hands: Int, val perk: String?, val unlockAnte: Int) {
+enum class StartDeck(val label: String, val desc: String, val money: Int, val hands: Int, val perk: String?, val unlockAnte: Int, val unlockRank: Int = 0) {
     STANDARD("Standard Deck", "\$8 and 5 hands a blind. No frills.", 8, 5, null, 0),
     COUNTER("Counter's Deck", "\$6, 5 hands a blind and the Spotter perk, so you see the running count from the first hand.", 6, 5, "spotter", 0),
     ROLLER("High Roller Deck", "\$10, only 4 hands a blind, and the High Roller perk. Clear Ante 3 once to unlock.", 10, 4, "roller", 3),
+    LUCKY("Lucky Deck", "\$8, 5 hands a blind and a free random Uncommon perk to start. Reach rank Hustler to unlock.", 8, 5, null, 0, 2),
+    TYCOON("Tycoon Deck", "\$20 and the Golden Ticket perk, but only 4 hands a blind. Reach rank High Roller to unlock.", 20, 4, "ticket", 0, 4),
 }
 
 /** What you get for skipping a blind. One is rolled for each skippable blind, so skipping is a real choice. */
@@ -298,6 +300,13 @@ enum class SkipTag(val label: String, val desc: String) {
     CASH("\$8", "Skip this blind and take \$8 right now."),
     TRAIN("Train 2 hands", "Skip this blind and level up two random hand types."),
     HANDS("+2 hands", "Skip this blind and get 2 extra hands in the next blind."),
+}
+
+/** What you earn for beating the boss of an ante. It sticks around for the rest of the run. */
+enum class Milestone(val label: String, val desc: String) {
+    PACK("Free Perk Pack", "A free Perk Pack with better odds for rare perks."),
+    HAND("+1 hand, forever", "Every blind from now on has one more hand."),
+    SLOT("+1 perk slot", "You can now hold one more perk."),
 }
 
 /** A side goal for each blind. Finish it for cash on the spot. */
@@ -317,8 +326,11 @@ data class ScoreEvent(
 
 data class Cashout(val lines: List<Pair<String, Int>>) { val total: Int get() = lines.sumOf { it.second } }
 
-class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
+class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val hard: Boolean = false) {
     companion object {
+        /** The prize at the end of each ante's boss blind. Ante 6 is the win. */
+        val MILESTONES: List<Milestone?> = listOf(Milestone.PACK, Milestone.HAND, Milestone.SLOT, Milestone.PACK, Milestone.HAND, null)
+        const val HARD_MUL = 1.3
         const val MAX_ANTE = 6
         const val SLOTS = 5
         const val UNIT = 10
@@ -338,7 +350,12 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     val perks = mutableListOf<Perk>()
     /** How far each kind of win has been trained. */
     val levels = IntArray(HandType.entries.size)
-    val slots: Int get() = SLOTS + perks.count { it.edition == Edition.NEGATIVE }
+    var extraSlots = 0; private set
+    var permHands = 0; private set
+    var milestone: Milestone? = null; private set
+    var maxPerks = 0; private set
+    var goalsDone = 0; private set
+    val slots: Int get() = SLOTS + extraSlots + perks.count { it.edition == Edition.NEGATIVE }
     var lastTrained: HandType? = null; private set
     fun level(t: HandType) = levels[t.ordinal]
     private val levelPower: Int get() = if (perks.any { it.id == "scholar" }) 2 else 1
@@ -386,13 +403,15 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
 
     init {
         deck.perk?.let { id -> Perks.fresh(id)?.let { perks += it } }
+        if (deck == StartDeck.LUCKY) Perks.ALL.filter { it.rarity == Rarity.UNCOMMON && it.effect != null }.let { l -> perks += l[rnd.nextInt(l.size)].copyWith() }
+        maxPerks = perks.size
         rollSkipTag()
     }
 
     val gs: GameState get() = game.state()
     val target: Int get() = targetFor(ante, blind, boss)
     fun targetFor(a: Int, b: Int, bs: Boss): Int {
-        val raw = BASE[(a - 1).coerceIn(0, MAX_ANTE - 1)] * BLIND_MUL[b] * (if (b == 2) bs.targetMul else 1.0)
+        val raw = BASE[(a - 1).coerceIn(0, MAX_ANTE - 1)] * BLIND_MUL[b] * (if (b == 2) bs.targetMul else 1.0) * (if (hard) HARD_MUL else 1.0)
         return ((raw / 10).roundToInt() * 10).coerceAtLeast(10)
     }
     val reward: Int get() = REWARD[blind]
@@ -415,7 +434,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         if (phase != RunPhase.SELECT) return false
         handsMax = when {
             activeBoss?.onlyHands ?: 0 > 0 -> activeBoss!!.onlyHands
-            else -> deck.hands + perks.sumOf { it.handsBonus } + bonusHands + (activeBoss?.handsDelta ?: 0) + (if (ante == 1) 1 else 0)
+            else -> deck.hands + perks.sumOf { it.handsBonus } + bonusHands + permHands + (activeBoss?.handsDelta ?: 0) + (if (ante == 1) 1 else 0)
         }
         handsLeft = handsMax; score = 0; winStreak = 0; losses = 0; lastStake = 0; netUsed = false
         goal = if (handsMax <= 1) null else BlindGoal.entries[rnd.nextInt(BlindGoal.entries.size)]; goalDone = false
@@ -536,7 +555,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
                             BlindGoal.HIGH -> total >= 20
                             BlindGoal.BIG -> total2 * 10 >= target * 4
                         }
-                        if (hit) { goalDone = true; goalKey = evKey + 1; money += GOAL_PAY }
+                        if (hit) { goalDone = true; goalsDone++; goalKey = evKey + 1; money += GOAL_PAY }
                     }
                     if (total2 > bestHand) { bestHand = total2; bestCards = h.cards; bestType = type; bestChips = chips; bestMult = mult }
                     money += fx.money
@@ -569,6 +588,8 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         if (tick > 0) lines += "Golden Ticket" to tick
         perks.filter { it.id == "snow" }.forEach { it.grow++ }
         repeat(perks.count { it.id == "trainer" }) { HandType.entries[rnd.nextInt(HandType.entries.size)].let { t -> levels[t.ordinal]++; lastTrained = t } }
+        milestone = if (blind == 2) MILESTONES.getOrNull(ante - 1) else null
+        when (milestone) { Milestone.HAND -> permHands++; Milestone.SLOT -> extraSlots++; else -> {} }
         cashout = Cashout(lines)
         money += cashout!!.total
         blindsCleared++
@@ -582,6 +603,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         phase = RunPhase.SHOP
         rerollCost = 2
         roll()
+        if (milestone == Milestone.PACK) { pack = rollPack(rareBoost = true); milestone = null }
         return true
     }
 
@@ -609,15 +631,16 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     /** The perks in the pack that is open right now, or null. */
     var pack: List<Perk>? = null; private set
 
-    private fun rollPack(): List<Perk> {
+    private fun rollPack(rareBoost: Boolean = false): List<Perk> {
         val owned = perks.map { it.id }.toSet()
         val pool = Perks.ALL.filter { it.id !in owned }.toMutableList()
         val out = mutableListOf<Perk>()
         repeat(3) {
             if (pool.isEmpty()) return@repeat
-            val total = pool.sumOf { it.rarity.weight + if (it.rarity != Rarity.COMMON) 12 else 0 }
+            val bonus = if (rareBoost) 40 else 12
+            val total = pool.sumOf { it.rarity.weight + if (it.rarity != Rarity.COMMON) bonus else 0 }
             var roll = rnd.nextInt(total)
-            val pk = pool.first { roll -= it.rarity.weight + if (it.rarity != Rarity.COMMON) 12 else 0; roll < 0 }
+            val pk = pool.first { roll -= it.rarity.weight + if (it.rarity != Rarity.COMMON) bonus else 0; roll < 0 }
             pool.remove(pk)
             val e = rnd.nextInt(100).let { v -> when { v < 6 -> Edition.NEGATIVE; v < 16 -> Edition.POLY; v < 32 -> Edition.HOLO; v < 52 -> Edition.FOIL; else -> Edition.NONE } }
             out += pk.copyWith(edition = e)
@@ -632,6 +655,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     fun pickFromPack(j: Int): Boolean {
         if (!canPick(j)) return false
         perks += pack!![j].copyWith(); pack = null
+        maxPerks = maxOf(maxPerks, perks.size)
         return true
     }
     fun skipPack() { pack = null }
@@ -648,7 +672,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         if (!canBuy(i)) return false
         val o = offers[i]
         money -= o.cost; o.sold = true
-        o.perk?.let { perks += it.copyWith() }
+        o.perk?.let { perks += it.copyWith(); maxPerks = maxOf(maxPerks, perks.size) }
         o.train?.let { levels[it.ordinal]++; lastTrained = it }
         if (o.pack) pack = rollPack()
         when (o.tonic) { Tonic.HAND -> bonusHands++; Tonic.COUNT -> countNotes = true; null -> {} }
@@ -688,6 +712,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     fun save(): String = listOf(
         "2", deck.name, ante, blind, money, perks.joinToString(",") { "${it.id}@${it.edition.name}:${it.grow}" }, bonusHands, if (countNotes) 1 else 0,
         blindsCleared, bestHand, skips, if (phase == RunPhase.SHOP) 1 else 0, levels.joinToString(","),
+        extraSlots, permHands, if (hard) 1 else 0, goalsDone, maxPerks,
     ).joinToString("|")
 
     /** True while it is safe to save: not in the middle of a blind. */
@@ -701,6 +726,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         if (shop) { phase = RunPhase.SHOP; rerollCost = 2; roll() }
     }
 
+    internal fun setExtras(slots: Int, hands: Int, goals: Int, maxP: Int) { extraSlots = slots; permHands = hands; goalsDone = goals; maxPerks = maxOf(maxP, perks.size) }
     internal fun forceMoney(n: Int) { money = n }
     internal fun forceScore(n: Int) { score = n }
     internal fun setLevels(l: List<Int>) { l.forEachIndexed { i, v -> if (i < levels.size) levels[i] = v } }
@@ -715,7 +741,7 @@ object RunSave {
             val p = text.split("|")
             if (p[0] != "1" && p[0] != "2") return null
             val deck = StartDeck.valueOf(p[1])
-            val r = Run(deck, rnd)
+            val r = Run(deck, rnd, p.getOrNull(15) == "1")
             r.perks.clear()
             p[5].split(",").filter { it.isNotEmpty() }.forEach { tok ->
                 val id = tok.substringBefore("@").substringBefore(":")
@@ -725,6 +751,7 @@ object RunSave {
             }
             r.setState(p[2].toInt(), p[3].toInt(), p[4].toInt(), p[6].toInt(), p[7] == "1", p[8].toInt(), p[9].toInt(), p[10].toInt(), p[11] == "1")
             if (p[0] == "2" && p.size > 12) r.setLevels(p[12].split(",").mapNotNull { it.toIntOrNull() })
+            if (p.size > 17) r.setExtras(p[13].toInt(), p[14].toInt(), p.getOrNull(16)?.toIntOrNull() ?: 0, p.getOrNull(17)?.toIntOrNull() ?: 0)
             r
         } catch (e: Exception) { null }
     }

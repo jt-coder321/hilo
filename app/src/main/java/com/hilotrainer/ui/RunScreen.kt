@@ -69,6 +69,8 @@ import com.hilotrainer.engine.Perk
 import com.hilotrainer.engine.Rarity
 import com.hilotrainer.engine.Run
 import com.hilotrainer.engine.RunPhase
+import com.hilotrainer.engine.RunMeta
+import com.hilotrainer.engine.RunRecord
 import com.hilotrainer.engine.RunSave
 import com.hilotrainer.engine.ScoreEvent
 import com.hilotrainer.engine.StartDeck
@@ -135,12 +137,44 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
     fun toggleSound() { soundOn = !soundOn; store.runSound = soundOn; rev++ }
 
     val hasSave: Boolean get() = !store.runSave.isNullOrBlank()
-    fun unlocked(d: StartDeck) = d.unlockAnte == 0 || store.runBest > d.unlockAnte
+    var lastReward by mutableStateOf<RunReward?>(null)
+    var codexOpen by mutableStateOf(false)
+    var goalsOpen by mutableStateOf(false)
+    val rank: Int get() = RunMeta.rankOf(store.runXp)
+    fun unlocked(d: StartDeck) = (d.unlockAnte == 0 && d.unlockRank == 0) || (d.unlockAnte > 0 && store.runBest > d.unlockAnte) || (d.unlockRank > 0 && rank >= d.unlockRank)
+    val hardOn: Boolean get() = store.runHard && store.runWins > 0
+    fun toggleHard() { store.runHard = !store.runHard; rev++ }
+
+    /** Every perk the player has seen in a shop or pack is added to the collection. */
+    private fun noteSeen(r: Run) {
+        val have = store.runSeen.split(',').filter { it.isNotEmpty() }.toMutableSet()
+        val before = have.size
+        r.perks.forEach { have += it.id }
+        r.offers.forEach { o -> o.perk?.let { have += it.id } }
+        r.pack?.forEach { have += it.id }
+        if (have.size != before) store.runSeen = have.joinToString(",")
+    }
+
+    private fun payOut(r: Run) {
+        val rec = RunRecord(if (r.phase == RunPhase.WON) Run.MAX_ANTE else r.ante, r.blindsCleared, r.bestHand, r.phase == RunPhase.WON, r.deck, r.maxPerks, r.skips, r.goalsDone, r.hard)
+        store.runBonusTotal = store.runBonusTotal + r.goalsDone
+        val seenCount = store.runSeen.split(',').count { it.isNotEmpty() }
+        val done = store.runGoalsDone.split(',').filter { it.isNotEmpty() }.toMutableSet()
+        val fresh = RunMeta.GOALS.filter { it.id !in done && it.test(rec, seenCount, store.runBonusTotal) }
+        val gained = RunMeta.xpFor(rec) + fresh.sumOf { it.xp }
+        val before = store.runXp
+        val after = before + gained
+        store.runXp = after
+        store.runGoalsDone = (done + fresh.map { it.id }).joinToString(",")
+        val unlocks = StartDeck.entries.filter { it.unlockRank > RunMeta.rankOf(before) && it.unlockRank <= RunMeta.rankOf(after) }.map { it.label }
+        lastReward = RunReward(gained, before, after, fresh, unlocks)
+    }
 
     fun start(d: StartDeck) {
         if (!unlocked(d)) return
         if (store.runCount == 0) guideOpen = true
-        run = Run(d, rnd).also { it.openStarterPack() }; recorded = false; seenKey = 0; lastAnte = 0; lastBlindSeen = -1; packOpen = false; animating = false; sa.clear(); store.runCount = store.runCount + 1; store.runSave = run!!.save(); rev++
+        lastReward = null
+        run = Run(d, rnd, hardOn).also { it.openStarterPack() }; recorded = false; seenKey = 0; lastAnte = 0; lastBlindSeen = -1; packOpen = false; animating = false; sa.clear(); store.runCount = store.runCount + 1; store.runSave = run!!.save(); rev++
     }
 
     fun resume() {
@@ -159,6 +193,7 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
         val k = r.lastScore.firstOrNull()?.key ?: 0
         if (k != 0 && k != seenKey) { seenKey = k; animKey = k; animating = animOn; fast = false }
         if (r.saveable) store.runSave = r.save()
+        noteSeen(r)
         if (r.phase == RunPhase.PLAY && !r.inRound && (r.ante != lastAnte || r.blind != lastBlindSeen)) {
             if (r.ante != lastAnte) anteKey++
             if (r.isBoss) { bossKey++; glitchKey++ }
@@ -173,6 +208,7 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
             if (r.phase == RunPhase.WON) store.runWins = store.runWins + 1
             val row = "${if (r.phase == RunPhase.WON) Run.MAX_ANTE else r.ante},${r.blindsCleared},${r.bestHand},${if (r.phase == RunPhase.WON) 1 else 0},${r.deck.ordinal}"
             store.runHistory = (store.runHistory.split(';').filter { it.isNotBlank() } + row).takeLast(20).joinToString(";")
+            payOut(r)
         }
     }
 
@@ -260,7 +296,7 @@ fun RunScreen(store: CasualStore, onExit: () -> Unit, vm: RunVm = remember { Run
     RunMotion.reduce = !vm.store.runMotion || sysOff
     RunMotion.quality = vm.store.runQuality
     val r = vm.run
-    BackHandler { if (vm.guideOpen) vm.guideOpen = false else if (vm.historyOpen) vm.historyOpen = false else if (vm.levelsOpen) vm.levelsOpen = false else if (vm.perkOpen != null) vm.perkOpen = null else if (r != null) vm.leaveRun() else onExit() }
+    BackHandler { if (vm.codexOpen) vm.codexOpen = false else if (vm.goalsOpen) vm.goalsOpen = false else if (vm.guideOpen) vm.guideOpen = false else if (vm.historyOpen) vm.historyOpen = false else if (vm.levelsOpen) vm.levelsOpen = false else if (vm.perkOpen != null) vm.perkOpen = null else if (r != null) vm.leaveRun() else onExit() }
     val venue = Venues.of(r?.ante ?: 1)
     CompositionLocalProvider(LocalRunSfx provides vm::sfx) {
         RippleLayer(Modifier.fillMaxSize()) {
@@ -287,6 +323,8 @@ fun RunScreen(store: CasualStore, onExit: () -> Unit, vm: RunVm = remember { Run
             if (r != null && vm.levelsOpen) LevelsSheet(vm, r)
             if (r != null && r.pack != null) PackSheet(vm, r)
             if (r == null && vm.historyOpen) HistorySheet(vm)
+            if (r == null && vm.codexOpen) CodexSheet(vm.store) { vm.codexOpen = false }
+            if (r == null && vm.goalsOpen) GoalsSheet(vm.store) { vm.goalsOpen = false }
             if (vm.guideOpen) RunGuideSheet { vm.guideOpen = false }
             CardWipe(vm.wipeKey, venue.base)
             Shockwave(vm.shockKey, Color(0xFFFFD35A))
@@ -353,7 +391,14 @@ private fun StartPane(vm: RunVm) {
             "Beat each blind's chip target before you run out of hands. Wins score chips x mult. Train your hand types, stack perks and editions, and clear ${Run.MAX_ANTE} antes to win.",
             fontSize = 14.sp, color = Cream.copy(alpha = 0.88f), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 520.dp),
         )
+        RankCard(vm.store, Modifier.widthIn(max = 520.dp))
         if (vm.hasSave) ChunkyButton("Continue your Rogue Run", Color(0xFF2FA866), Modifier.widthIn(max = 420.dp).fillMaxWidth()) { vm.resume() }
+        if (vm.store.runWins > 0) Row(Modifier.widthIn(max = 520.dp).fillMaxWidth().chunky(if (vm.hardOn) Color(0xFF7A1E1E) else Color(0xFF241F3F), radius = 12.dp, lift = 2.dp).clip(RoundedCornerShape(12.dp)).clickable { vm.toggleHard() }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("HARD MODE  ${if (vm.hardOn) "ON" else "OFF"}", fontSize = 13.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (vm.hardOn) Color(0xFFFF8A8A) else Gold)
+                Text("Targets are 30% higher. Rank points are doubled.", fontSize = 11.sp, color = Cream.copy(alpha = 0.8f))
+            }
+        }
         Text(if (vm.hasSave) "Or start a new one (this replaces the saved run)" else "Pick a starting deck", fontSize = 13.sp, color = Gold, fontFamily = Mono)
         StartDeck.entries.forEach { d ->
             val ok = vm.unlocked(d)
@@ -363,8 +408,14 @@ private fun StartPane(vm: RunVm) {
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(d.label, fontSize = 18.sp, fontWeight = FontWeight.Black, color = if (ok) Gold else Cream.copy(alpha = 0.5f))
-                Text(if (ok) d.desc else "Locked. Reach Ante ${d.unlockAnte + 1} in any run to unlock it.", fontSize = 13.sp, color = Cream.copy(alpha = if (ok) 0.85f else 0.5f))
+                Text(if (ok) d.desc else if (d.unlockRank > 0) "Locked. Reach rank ${RunMeta.title(d.unlockRank)} to unlock it." else "Locked. Reach Ante ${d.unlockAnte + 1} in any run to unlock it.", fontSize = 13.sp, color = Cream.copy(alpha = if (ok) 0.85f else 0.5f))
             }
+        }
+        val found = vm.store.runSeen.split(',').count { it.isNotEmpty() }
+        val goalsN = vm.store.runGoalsDone.split(',').count { it.isNotEmpty() }
+        Row(Modifier.widthIn(max = 520.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChunkyButton("Perks $found/${com.hilotrainer.engine.Perks.ALL.size}", Color(0xFF9B5CE6), Modifier.weight(1f), small = true) { vm.codexOpen = true }
+            ChunkyButton("Goals $goalsN/${RunMeta.GOALS.size}", Color(0xFFC9922A), Modifier.weight(1f), small = true) { vm.goalsOpen = true }
         }
         ChunkyButton("How it works in plain words", Color(0xFF2E8BFF), Modifier.widthIn(max = 520.dp).fillMaxWidth(), small = true) { vm.guideOpen = true }
         ChunkyButton("Run history", Color(0xFF6A4DE0), Modifier.widthIn(max = 520.dp).fillMaxWidth(), small = true) { vm.historyOpen = true }
@@ -380,6 +431,7 @@ private fun SelectPane(vm: RunVm, r: Run) {
     vm.rev
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         VenueHeader(r, if (r.isBoss) "I'm ${r.boss.name}. ${r.boss.desc}" else "Welcome to ${Venues.of(r.ante).name}. ${Venues.of(r.ante).tag}.")
+        JourneyMap(r, Modifier.widthIn(max = 560.dp))
         for (i in 0..2) BlindCard(vm, r, i)
         Row(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("YOUR PERKS", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold, fontFamily = Mono, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
@@ -724,6 +776,13 @@ private fun CashoutPane(vm: RunVm, r: Run) {
                 if (rows > co.lines.size) Row { Text("Total", fontSize = 17.sp, fontWeight = FontWeight.Black, color = Gold, modifier = Modifier.weight(1f)); Text("+\$${co.total}", fontSize = 20.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = GoodGreen) }
             }
             Text("You now have \$${r.money}", fontSize = 14.sp, color = Cream.copy(alpha = 0.85f))
+            r.milestone?.let { m ->
+                Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().chunky(Brush.verticalGradient(listOf(Color(0xFF3A2D10), Color(0xFF1E1606))), edge = Color(0xFFFFD35A), radius = 16.dp, lift = 4.dp, border = 3.dp).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("ANTE ${r.ante} COMPLETE", fontSize = 13.sp, letterSpacing = 2.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color(0xFFFFE08A))
+                    Text("BOSS PRIZE: ${m.label.uppercase()}", fontSize = 18.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color.White, textAlign = TextAlign.Center)
+                    Text(m.desc, fontSize = 13.sp, color = Cream.copy(alpha = 0.9f), textAlign = TextAlign.Center)
+                }
+            }
             ChunkyButton(if (r.isBoss && r.ante >= Run.MAX_ANTE) "Finish the Rogue Run" else "To the shop", Color(0xFF2FA866), Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.sfx(Fx.RG_COIN, 1f); vm.mut { collect() } }
         }
     }
@@ -883,6 +942,7 @@ private fun EndPane(vm: RunVm, r: Run, onExit: () -> Unit) {
                     Text("= ${fmt(r.bestHand)}", fontSize = 18.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold)
                 }
             }
+            vm.lastReward?.let { RewardPanel(it, Modifier.widthIn(max = 460.dp)) }
             Text("YOUR PERKS", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold, fontFamily = Mono, fontWeight = FontWeight.Black)
             Text(if (r.perks.isEmpty()) "None" else r.perks.joinToString(", ") { it.title }, fontSize = 13.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center)
             ChunkyButton("New Rogue Run", Color(0xFF2FA866), Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.leaveRun() }

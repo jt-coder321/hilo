@@ -128,6 +128,26 @@ class CasualStore(context: Context?) {
     var runQuality: Int
         get() = int("run_quality", 1).coerceIn(0, 2)
         set(v) = put({ putInt("run_quality", v.coerceIn(0, 2)) }, "run_quality" to v.coerceIn(0, 2))
+    /** Rank points carried across runs. */
+    var runXp: Int
+        get() = int("run_xp", 0)
+        set(v) = put({ putInt("run_xp", v) }, "run_xp" to v)
+    /** Ids of permanent goals already done, separated by commas. */
+    var runGoalsDone: String
+        get() = str("run_goals") ?: ""
+        set(v) = put({ putString("run_goals", v) }, "run_goals" to v)
+    /** Ids of perks found so far (shop, packs or owned), separated by commas. */
+    var runSeen: String
+        get() = str("run_seen") ?: ""
+        set(v) = put({ putString("run_seen", v) }, "run_seen" to v)
+    /** Bonus goals finished across all runs. */
+    var runBonusTotal: Int
+        get() = int("run_bonus_total", 0)
+        set(v) = put({ putInt("run_bonus_total", v) }, "run_bonus_total" to v)
+    /** Hard mode: bigger targets, double rank points. Unlocked after a first win. */
+    var runHard: Boolean
+        get() = int("run_hard", 0) == 1
+        set(v) = put({ putInt("run_hard", if (v) 1 else 0) }, "run_hard" to (if (v) 1 else 0))
     /** Finished runs, newest last: ante,cleared,bestHand,won,deckIndex separated by semicolons. */
     var runHistory: String
         get() = str("run_hist") ?: ""

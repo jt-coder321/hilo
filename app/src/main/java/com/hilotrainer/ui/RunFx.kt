@@ -99,6 +99,8 @@ fun RunBackdrop(venue: Venue, boss: Boolean, modifier: Modifier = Modifier) {
             drawCircle(lerp(venue.print, Color.White, 0.3f).copy(alpha = 0.05f + 0.05f * rnd.nextFloat()), br, Offset(bx, by))
             drawCircle(venue.print.copy(alpha = 0.10f), br, Offset(bx, by), style = Stroke(1.dp.toPx()))
         }
+        // The room's own scene: lamps, water, neon, skyline, vault door.
+        venueScene(Venues.ALL.indexOf(venue).coerceAtLeast(0), if (animOn) t else 0.2f, venue.print)
         // Film grain.
         val gr = Random(3)
         repeat(if (fxLevel == 1) 80 else 220) { drawCircle(Color.White.copy(alpha = 0.035f + 0.03f * gr.nextFloat()), 0.9f, Offset(gr.nextFloat() * w, gr.nextFloat() * h)) }

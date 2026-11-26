@@ -244,14 +244,16 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
     val venue = Venues.of(r.ante)
     val dealer = remember(r.ante, r.blind, r.boss.id) { runDealer(r) }
     val seats = remember(r.ante, r.blind) { runSeats(r) }
-    val round = gs.hands.isNotEmpty()
+    // A fresh blind starts with a clean table: the last blind's cards are not shown until a new hand is dealt.
+    val round = gs.hands.isNotEmpty() && (r.inRound || r.lastScore.isNotEmpty())
+    val dCards = if (round) gs.dealerCards else emptyList()
     val over = round && !r.inRound
     val evs: List<ScoreEvent> = if (over) r.lastScore else emptyList()
     val key = evs.firstOrNull()?.key ?: 0
     val showHole = gs.holeRevealed || gs.phase == Phase.ROUND_OVER
     val won = evs.any { it.total > 0 }
-    val dBust = gs.dealerCards.isNotEmpty() && handTotal(gs.dealerCards).first > 21
-    val extraBot = gs.bots.maxOfOrNull { (it.cards.size - 2).coerceAtLeast(0) } ?: 0
+    val dBust = dCards.isNotEmpty() && handTotal(dCards).first > 21
+    val extraBot = if (!round) 0 else gs.bots.maxOfOrNull { (it.cards.size - 2).coerceAtLeast(0) } ?: 0
 
     val dealerQuote = when {
         r.inRound -> RunTalk.pick(RunTalk.YOUR_MOVE, r.handsLeft * 7 + gs.cardsDealt)
@@ -289,7 +291,7 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
             // Dealer cards.
             val dHandTop = dTop + dav - h * 0.012f
             Box(Modifier.offset(0.dp, dHandTop).width(w), contentAlignment = Alignment.TopCenter) {
-                val cards = gs.dealerCards
+                val cards = dCards
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (cards.isNotEmpty()) TotalPill(if (showHole) cards else listOf(cards.first()), null) else Box(Modifier.height(18.dp))
                     val step = if (cards.size <= 1) 0.dp else minOf(dcw * 0.62f, (w * 0.5f - dcw) / (cards.size - 1)).coerceAtLeast(dcw * 0.25f)
@@ -309,7 +311,7 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
             for (s in 0..1) {
                 val m = seats[s]
                 val cx = if (s == 0) w * 0.17f else w * 0.83f
-                val hand = gs.bots.getOrNull(s)
+                val hand = if (round) gs.bots.getOrNull(s) else null
                 val res = if (over) gs.botResults.getOrNull(s)?.outcome else null
                 val quote = when {
                     res != null -> RunTalk.pick(when (res) { Outcome.BLACKJACK -> RunTalk.BOT_BJ; Outcome.WIN -> RunTalk.BOT_WIN; Outcome.BUST -> RunTalk.BOT_BUST; Outcome.PUSH -> RunTalk.BOT_PUSH; else -> RunTalk.BOT_LOSE }, key + s * 13 + 1)

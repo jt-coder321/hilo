@@ -152,3 +152,61 @@ fun PerkArt(id: String, rarity: Rarity, tint: Color, modifier: Modifier = Modifi
 
 /** What a perk does decides its color: chips blue, mult red, big multipliers gold, money green. */
 fun perkTint(badgeColor: Color): Color = badgeColor
+
+/** A scene in the background that belongs to each room, drawn in layers behind everything. [t] runs 0 to 1 and loops. */
+fun DrawScope.venueScene(index: Int, t: Float, accent: Color) {
+    val w = size.width; val h = size.height
+    val tau = (2 * PI).toFloat()
+    val rnd = kotlin.random.Random(index * 17 + 3)
+    when (index) {
+        0 -> { // Hanging lamps and brick.
+            var y = h * 0.52f; var row = 0
+            while (y < h) { var x = if (row % 2 == 0) 0f else -18.dp.toPx(); while (x < w) { drawRect(Color.Black.copy(alpha = 0.10f), Offset(x + 1f, y + 1f), androidx.compose.ui.geometry.Size(34.dp.toPx(), 14.dp.toPx()), style = Stroke(1f)); x += 36.dp.toPx() }; y += 16.dp.toPx(); row++ }
+            for (i in 0..2) {
+                val x = w * (0.2f + i * 0.3f); val sw = sin(tau * (t + i * 0.3f)) * 3.dp.toPx()
+                drawLine(Color.Black.copy(alpha = 0.6f), Offset(x, 0f), Offset(x + sw, h * 0.07f), 2.dp.toPx())
+                val shade = Path().apply { moveTo(x + sw - 6.dp.toPx(), h * 0.07f); lineTo(x + sw + 6.dp.toPx(), h * 0.07f); lineTo(x + sw + 16.dp.toPx(), h * 0.095f); lineTo(x + sw - 16.dp.toPx(), h * 0.095f); close() }
+                drawPath(shade, Color(0xFF1B1209))
+                drawCircle(Brush.radialGradient(listOf(Color(0x66FFD98A), Color.Transparent), Offset(x + sw, h * 0.1f), w * 0.22f), w * 0.22f, Offset(x + sw, h * 0.1f))
+            }
+        }
+        1 -> { // Water and a paddle wheel.
+            for (k in 0..2) {
+                val base = h * (0.86f + k * 0.045f)
+                val p = Path().apply { moveTo(0f, h); lineTo(0f, base); var x = 0f; while (x <= w) { lineTo(x, base + sin(tau * (x / w * 3f + t * (1 + k) * (if (k % 2 == 0) 1 else -1))) * 4.dp.toPx()); x += 8.dp.toPx() }; lineTo(w, h); close() }
+                drawPath(p, Color(0xFF5AA0E6).copy(alpha = 0.10f + k * 0.05f))
+            }
+            val c = Offset(w * 0.94f, h * 0.9f)
+            rotate(t * 360f, c) { for (i in 0 until 8) { val a = i * tau / 8; drawLine(Color.White.copy(alpha = 0.10f), c, Offset(c.x + cos(a) * w * 0.16f, c.y + sin(a) * w * 0.16f), 3.dp.toPx()) } }
+            drawCircle(Color.White.copy(alpha = 0.10f), w * 0.16f, c, style = Stroke(3.dp.toPx()))
+        }
+        2 -> { // Neon tubes.
+            val cols = listOf(Color(0xFFFF4FD8), Color(0xFF4FE7FF), Color(0xFFFFE04F), Color(0xFFFF4FD8), Color(0xFF4FE7FF))
+            for (i in 0..4) {
+                val x = w * (0.1f + i * 0.2f); val top = h * (0.04f + rnd.nextFloat() * 0.05f); val len = h * (0.10f + rnd.nextFloat() * 0.12f)
+                val flick = if (i == 2 && t % 0.5f < 0.04f) 0.3f else 1f
+                drawLine(cols[i].copy(alpha = 0.14f * flick), Offset(x, top), Offset(x, top + len), 14.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawLine(cols[i].copy(alpha = 0.45f * flick), Offset(x, top), Offset(x, top + len), 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawLine(Color.White.copy(alpha = 0.7f * flick), Offset(x, top + 2.dp.toPx()), Offset(x, top + len - 2.dp.toPx()), 1.2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            }
+        }
+        3, 5 -> { // A night skyline, with a moon and stars in the penthouse.
+            if (index == 5) { repeat(40) { i -> val tw = 0.5f + 0.5f * sin(tau * (t * 2f + i * 0.13f)); drawCircle(Color.White.copy(alpha = 0.25f * tw), 1.2f, Offset(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.5f)) }; drawCircle(Color(0x33FFF0C0), w * 0.07f, Offset(w * 0.8f, h * 0.1f)) }
+            var x = 0f
+            while (x < w) {
+                val bw = (16 + rnd.nextInt(26)).dp.toPx(); val bh = h * (0.07f + rnd.nextFloat() * 0.13f)
+                drawRect(Color.Black.copy(alpha = 0.45f), Offset(x, h - bh), androidx.compose.ui.geometry.Size(bw, bh))
+                var wy = h - bh + 6.dp.toPx()
+                while (wy < h - 4.dp.toPx()) { var wx = x + 4.dp.toPx(); while (wx < x + bw - 5.dp.toPx()) { if (rnd.nextInt(3) == 0) drawRect(accent.copy(alpha = 0.35f), Offset(wx, wy), androidx.compose.ui.geometry.Size(3.dp.toPx(), 4.dp.toPx())); wx += 8.dp.toPx() }; wy += 10.dp.toPx() }
+                x += bw + 3.dp.toPx()
+            }
+        }
+        4 -> { // A vault door.
+            val c = Offset(w * 0.5f, h * 0.55f); val r0 = minOf(w, h) * 0.42f
+            drawCircle(accent.copy(alpha = 0.07f), r0, c, style = Stroke(10.dp.toPx()))
+            drawCircle(accent.copy(alpha = 0.05f), r0 * 0.75f, c, style = Stroke(4.dp.toPx()))
+            for (i in 0 until 12) { val a = i * tau / 12; drawCircle(accent.copy(alpha = 0.10f), 4.dp.toPx(), Offset(c.x + cos(a) * r0, c.y + sin(a) * r0)) }
+            rotate(t * 40f, c) { for (i in 0 until 4) { val a = i * tau / 4; drawLine(accent.copy(alpha = 0.09f), c, Offset(c.x + cos(a) * r0 * 0.7f, c.y + sin(a) * r0 * 0.7f), 6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round) } }
+        }
+    }
+}
