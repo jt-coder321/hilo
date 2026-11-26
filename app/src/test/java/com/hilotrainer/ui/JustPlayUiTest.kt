@@ -553,6 +553,76 @@ abstract class JustPlayShotBase {
     @Test fun dealerBubbleClearsBannerFloating() = dealerTalkRound(4, "jp-dealertalk-float")
     @Test fun dealerBubbleClearsBannerCaptions() = dealerTalkRound(2, "jp-dealertalk-captions")
 
+    private fun runVm(seed: Int, deck: com.hilotrainer.engine.StartDeck = com.hilotrainer.engine.StartDeck.COUNTER): RunVm {
+        val store = CasualStore(null)
+        return RunVm(store, Random(seed)).also { it.start(deck) }
+    }
+    private fun RunVm.playOutBlind() {
+        mut { startBlind() }
+        var g = 0
+        while (run!!.phase == com.hilotrainer.engine.RunPhase.PLAY && g++ < 300) {
+            if (!run!!.inRound) { stakePick = 3; deal() } else act(run!!.gs.basicAdvice!!.action.let { a -> if (run!!.canAct(a)) a else Action.STAND })
+        }
+    }
+
+    @Test fun runStart() { val v = runVm(1); v.leaveRun(); shoot("run-start") { RunScreen(v.store, {}, v) } }
+    @Test fun runSelect() { val v = runVm(2); shoot("run-select") { RunScreen(v.store, {}, v) } }
+    @Test fun runPlayMidHand() {
+        val v = runVm(3)
+        v.mut { startBlind() }
+        var g = 0
+        while (g++ < 40 && !(v.run!!.inRound)) { v.stakePick = 2; v.deal(); if (!v.run!!.inRound && v.run!!.handsLeft == 0) break }
+        shoot("run-play") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runPlayScored() {
+        val v = runVm(4, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { skipBlind() }
+        v.mut { startBlind() }
+        var g = 0
+        while (g++ < 60 && v.run!!.phase == com.hilotrainer.engine.RunPhase.PLAY && !(v.run!!.lastScore.any { it.total > 0 } && !v.run!!.inRound)) {
+            if (!v.run!!.inRound) { v.stakePick = 2; v.deal() } else v.act(v.run!!.gs.basicAdvice!!.action.let { a -> if (v.run!!.canAct(a)) a else Action.STAND })
+        }
+        shoot("run-scored") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runCashoutAndShop() {
+        val v = runVm(5, com.hilotrainer.engine.StartDeck.STANDARD)
+        var tries = 0
+        while (v.run!!.phase != com.hilotrainer.engine.RunPhase.CLEARED && tries++ < 20) { v.playOutBlind(); if (v.run!!.phase == com.hilotrainer.engine.RunPhase.OVER) v.start(com.hilotrainer.engine.StartDeck.STANDARD) }
+        assertEquals(com.hilotrainer.engine.RunPhase.CLEARED, v.run!!.phase)
+        shoot("run-cashout") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runShop() {
+        val v = runVm(6, com.hilotrainer.engine.StartDeck.STANDARD)
+        var tries = 0
+        while (v.run!!.phase != com.hilotrainer.engine.RunPhase.CLEARED && tries++ < 20) { v.playOutBlind(); if (v.run!!.phase == com.hilotrainer.engine.RunPhase.OVER) v.start(com.hilotrainer.engine.StartDeck.STANDARD) }
+        v.mut { collect() }
+        v.mut { forceMoney(20) }
+        v.mut { buy(offers.indexOfFirst { it.perk != null }) }
+        shoot("run-shop") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runEnd() {
+        val v = runVm(7)
+        v.mut { lose("Fell 140 short of 250 on the Big Blind of Ante 2.") }
+        shoot("run-end") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runSavesAndResumes() {
+        val v = runVm(8, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { skipBlind() }
+        val v2 = RunVm(v.store, Random(1))
+        assertTrue(v2.hasSave)
+        v2.resume()
+        assertEquals(1, v2.run!!.blind)
+        v2.mut { lose("test") }
+        assertTrue(!v2.hasSave)
+        assertEquals(1, v2.store.runBest)
+    }
+    @Test fun runMenuEntryOpensTheRun() {
+        val v = casualVm(9)
+        assertTrue(CasualTabs.contains("Run"))
+        v.runOpen = true
+        shoot("run-from-table") { JustPlayScreen(v) {} }
+    }
+
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
 
     @Test fun longSessionWithNewTalkStaysHonest() {

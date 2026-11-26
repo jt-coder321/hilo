@@ -45,17 +45,17 @@ object Perks {
     private fun p(id: String, name: String, r: Rarity, cost: Int, desc: String, effect: Perk.(HandCtx, Fx) -> Unit) = Perk(id, name, r, cost, desc, effect = effect)
 
     val ALL: List<Perk> = listOf(
-        p("sevens", "Lucky Sevens", Rarity.COMMON, 4, "Winning hands score +30 chips for each 7 in them.") { c, f ->
-            val n = c.cards.count { it.rank == Rank.SEVEN }; if (c.won && n > 0) f.hit(name, "+${30 * n} chips", chips = 30 * n)
+        p("sevens", "Lucky Sevens", Rarity.COMMON, 4, "Winning hands score +50 chips for each 7 in them.") { c, f ->
+            val n = c.cards.count { it.rank == Rank.SEVEN }; if (c.won && n > 0) f.hit(name, "+${50 * n} chips", chips = 50 * n)
         },
-        p("court", "Royal Court", Rarity.COMMON, 4, "Winning hands score +20 chips for each face card in them.") { c, f ->
-            val n = c.cards.count { it.rank in listOf(Rank.JACK, Rank.QUEEN, Rank.KING) }; if (c.won && n > 0) f.hit(name, "+${20 * n} chips", chips = 20 * n)
+        p("court", "Royal Court", Rarity.COMMON, 4, "Winning hands score +30 chips for each face card in them.") { c, f ->
+            val n = c.cards.count { it.rank in listOf(Rank.JACK, Rank.QUEEN, Rank.KING) }; if (c.won && n > 0) f.hit(name, "+${30 * n} chips", chips = 30 * n)
         },
         p("ace", "Ace in the Hole", Rarity.COMMON, 5, "Winning hands that hold an Ace score +3 mult.") { c, f ->
             if (c.won && c.cards.any { it.rank.isAce }) f.hit(name, "+3 mult", mult = 3.0)
         },
-        p("tell", "Dealer's Tell", Rarity.COMMON, 4, "+60 chips when you win because the dealer busts.") { c, f ->
-            if (c.won && c.dealerBust) f.hit(name, "+60 chips", chips = 60)
+        p("tell", "Dealer's Tell", Rarity.COMMON, 4, "+100 chips when you win because the dealer busts.") { c, f ->
+            if (c.won && c.dealerBust) f.hit(name, "+100 chips", chips = 100)
         },
         p("soft", "Soft Touch", Rarity.COMMON, 5, "Winning soft hands (counting an Ace as 11) score +4 mult.") { c, f ->
             if (c.won && c.soft) f.hit(name, "+4 mult", mult = 4.0)
@@ -77,8 +77,8 @@ object Perks {
         p("trouble", "Double Trouble", Rarity.UNCOMMON, 7, "Doubled wins score x2 mult.") { c, f ->
             if (c.won && c.doubled) f.hit(name, "x2 mult", x = 2.0)
         },
-        p("splitter", "Splitter", Rarity.UNCOMMON, 6, "Each winning split hand scores +50 chips and +2 mult.") { c, f ->
-            if (c.won && c.split) f.hit(name, "+50 chips +2 mult", chips = 50, mult = 2.0)
+        p("splitter", "Splitter", Rarity.UNCOMMON, 6, "Each winning split hand scores +80 chips and +3 mult.") { c, f ->
+            if (c.won && c.split) f.hit(name, "+80 chips +3 mult", chips = 80, mult = 3.0)
         },
         p("minimal", "Minimalist", Rarity.UNCOMMON, 6, "Winning with exactly two cards (not a blackjack) scores +6 mult.") { c, f ->
             if (c.won && !c.blackjack && c.cards.size == 2 && !c.split) f.hit(name, "+6 mult", mult = 6.0)
@@ -142,9 +142,9 @@ object Bosses {
 }
 
 enum class StartDeck(val label: String, val desc: String, val money: Int, val hands: Int, val perk: String?, val unlockAnte: Int) {
-    STANDARD("Standard Deck", "\$8 and 4 hands a blind. No frills.", 8, 4, null, 0),
-    COUNTER("Counter's Deck", "\$6 and the Spotter perk, so you see the running count from the first hand.", 6, 4, "spotter", 0),
-    ROLLER("High Roller Deck", "\$10, only 3 hands a blind, and the High Roller perk. Clear Ante 3 once to unlock.", 10, 3, "roller", 3),
+    STANDARD("Standard Deck", "\$8 and 5 hands a blind. No frills.", 8, 5, null, 0),
+    COUNTER("Counter's Deck", "\$6, 5 hands a blind and the Spotter perk, so you see the running count from the first hand.", 6, 5, "spotter", 0),
+    ROLLER("High Roller Deck", "\$10, only 4 hands a blind, and the High Roller perk. Clear Ante 3 once to unlock.", 10, 4, "roller", 3),
 }
 
 data class ScoreEvent(
@@ -159,7 +159,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         const val MAX_ANTE = 6
         const val SLOTS = 5
         const val UNIT = 10
-        val BASE = intArrayOf(150, 450, 1100, 2600, 6000, 13000)
+        val BASE = intArrayOf(100, 250, 550, 1150, 2400, 5000)
         val BLIND_MUL = doubleArrayOf(1.0, 1.5, 2.0)
         val BLIND_NAMES = listOf("Small Blind", "Big Blind", "Boss Blind")
         val REWARD = intArrayOf(3, 4, 5)
@@ -303,7 +303,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
                 if (bossBlocks) {
                     out += ScoreEvent(++evKey, r.outcome, 0, 0, 1.0, 0, 0, emptyList(), "${activeBoss!!.name}: a win under ${activeBoss!!.minWinTotal} scores nothing")
                 } else {
-                    val base = (if (r.outcome == Outcome.BLACKJACK) 40 else 20) * stake * (if (h.doubled) 2 else 1)
+                    val base = (if (r.outcome == Outcome.BLACKJACK) 75 else 50) * stake * (if (h.doubled) 2 else 1)
                     val fx = Fx()
                     perks.forEach { pk -> pk.effect?.invoke(pk, ctx, fx) }
                     val combo = comboFor(winStreak)

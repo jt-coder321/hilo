@@ -39,7 +39,7 @@ import com.hilotrainer.engine.Achievements
 import com.hilotrainer.engine.Cast
 import com.hilotrainer.engine.CasualDealers
 
-val CasualTabs = listOf("Table", "Look", "Options", "Stats", "Awards", "Regulars", "Nights")
+val CasualTabs = listOf("Table", "Look", "Options", "Stats", "Awards", "Regulars", "Nights", "Run")
 
 /** Just Play's menu: rules, looks, options, stats, achievements and who's who. */
 @Composable
@@ -71,7 +71,8 @@ fun CasualMenu(vm: CasualViewModel, tab: Int, onTab: (Int) -> Unit, onClose: () 
                     3 -> StatsTab(vm)
                     4 -> AwardsTab(vm)
                     5 -> RegularsTab()
-                    else -> NightsTab(vm)
+                    6 -> NightsTab(vm)
+                    else -> RunTab(vm, onClose)
                 }
             }
         }
@@ -229,4 +230,18 @@ private fun Person(look: com.hilotrainer.engine.Look, name: String, kind: String
             Text(bio, fontSize = 12.sp, color = Cream.copy(alpha = 0.72f))
         }
     }
+}
+
+/** The roguelike run: a way in, and what it is. */
+@Composable
+private fun RunTab(vm: CasualViewModel, onClose: () -> Unit) {
+    Text("The Run", fontSize = 20.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
+    Text(
+        "A roguelike mode. Beat a chip target in a few hands to clear each blind, earn money, and buy perks that bend the scoring. " +
+            "Stack them, find combos, and survive the boss blinds with their rule twists. Six antes of three blinds each.",
+        fontSize = 14.sp, color = Cream.copy(alpha = 0.85f),
+    )
+    Text("Some perks reward counting: the Spotter shows the Hi-Lo running count and Card Sharp pays when the true count is high.", fontSize = 13.sp, color = Cream.copy(alpha = 0.7f))
+    Text("Casual only. It plays on its own shoe and never touches your training stats.", fontSize = 12.sp, color = Cream.copy(alpha = 0.6f))
+    GoldButton(if (vm.store.runSave.isNullOrBlank()) "Start a run" else "Open the run", Modifier.fillMaxWidth()) { vm.runOpen = true; onClose() }
 }

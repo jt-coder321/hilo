@@ -175,6 +175,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     var dealerMood by mutableStateOf(Mood.NEUTRAL); private set
     private var shiftRounds = 0
     var pit by mutableStateOf<PitState?>(null); private set
+    /** The roguelike run screen is open over the table. */
+    var runOpen by mutableStateOf(false)
 
     // Table streak (cosmetic) and the heat you draw from the pit boss (casual only).
     private val streak = TableStreak()

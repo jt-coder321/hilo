@@ -95,6 +95,22 @@ class CasualStore(context: Context?) {
     var storyDone: Int
         get() = int("story_done", 0)
         set(v) = put({ putInt("story_done", v) }, "story_done" to v)
+    /** Roguelike run: the saved run, and the record across runs. Casual only. */
+    var runSave: String?
+        get() = str("run_save")
+        set(v) = put({ putString("run_save", v ?: "") }, "run_save" to (v ?: ""))
+    var runBest: Int
+        get() = int("run_best", 0)
+        set(v) = put({ putInt("run_best", v) }, "run_best" to v)
+    var runCount: Int
+        get() = int("run_count", 0)
+        set(v) = put({ putInt("run_count", v) }, "run_count" to v)
+    var runWins: Int
+        get() = int("run_wins", 0)
+        set(v) = put({ putInt("run_wins", v) }, "run_wins" to v)
+    var runBestHand: Int
+        get() = int("run_best_hand", 0)
+        set(v) = put({ putInt("run_best_hand", v) }, "run_best_hand" to v)
     var nightRun: String?
         get() = str("night_run")
         set(v) = put({ putString("night_run", v) }, "night_run" to (v ?: ""))
