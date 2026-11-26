@@ -62,7 +62,7 @@ class CasualStore(context: Context?) {
         get() = int("bankroll", START)
         set(v) = put({ putInt("bankroll", v) }, "bankroll" to v)
 
-    private fun str(k: String) = p?.getString(k, null) ?: (mem[k] as? String)
+    private fun str(k: String) = (p?.getString(k, null) ?: (mem[k] as? String))?.takeIf { it.isNotEmpty() }
 
     /** Each room keeps its own shoe, so the cards and the count are where you left them. */
     fun loadShoe(key: String): String? = str("shoe_$key")
@@ -81,6 +81,23 @@ class CasualStore(context: Context?) {
     var powerHands: Int
         get() = int("pu_hands", 0)
         set(v) = put({ putInt("pu_hands", v) }, "pu_hands" to v)
+
+    /** Your rival and the running score, and how far you are in the story. Casual only. */
+    var rivalName: String?
+        get() = str("rival_name")
+        set(v) = put({ putString("rival_name", v) }, "rival_name" to (v ?: ""))
+    var rivalWins: Int
+        get() = int("rival_w", 0)
+        set(v) = put({ putInt("rival_w", v) }, "rival_w" to v)
+    var rivalLosses: Int
+        get() = int("rival_l", 0)
+        set(v) = put({ putInt("rival_l", v) }, "rival_l" to v)
+    var storyDone: Int
+        get() = int("story_done", 0)
+        set(v) = put({ putInt("story_done", v) }, "story_done" to v)
+    var nightRun: String?
+        get() = str("night_run")
+        set(v) = put({ putString("night_run", v) }, "night_run" to (v ?: ""))
 
     var lastBet: Int
         get() = int("lastBet", 0)

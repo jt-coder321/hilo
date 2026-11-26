@@ -54,7 +54,8 @@ object Comps {
 }
 
 /** A friendly bet from another player: beat the dealer this hand and they pay you. */
-data class Dare(val seat: Int, val name: String, val stake: Int, val line: String)
+/** A friendly bet from another player. A [duel] is a head to head with the rival: the better hand wins. */
+data class Dare(val seat: Int, val name: String, val stake: Int, val line: String, val duel: Boolean = false, val seatId: Long = 0)
 
 object Dares {
     fun make(seat: Int, name: String, min: Int, rnd: Random): Dare {

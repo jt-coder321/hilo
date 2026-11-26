@@ -39,7 +39,7 @@ import com.hilotrainer.engine.Achievements
 import com.hilotrainer.engine.Cast
 import com.hilotrainer.engine.CasualDealers
 
-val CasualTabs = listOf("Table", "Look", "Options", "Stats", "Awards", "Regulars")
+val CasualTabs = listOf("Table", "Look", "Options", "Stats", "Awards", "Regulars", "Nights")
 
 /** Just Play's menu: rules, looks, options, stats, achievements and who's who. */
 @Composable
@@ -70,7 +70,8 @@ fun CasualMenu(vm: CasualViewModel, tab: Int, onTab: (Int) -> Unit, onClose: () 
                     2 -> OptionsTab(vm)
                     3 -> StatsTab(vm)
                     4 -> AwardsTab(vm)
-                    else -> RegularsTab()
+                    5 -> RegularsTab()
+                    else -> NightsTab(vm)
                 }
             }
         }

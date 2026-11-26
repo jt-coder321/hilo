@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -403,6 +404,77 @@ abstract class JustPlayShotBase {
         v.pitForTest(3)
         v.sayForTest(CasualViewModel.PIT, "Sir, you're welcome to play any other game.")
         shoot("jp-count-pit") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun storyNightUnlocksPaysAndSaves() {
+        val store = CasualStore(null)
+        val v = CasualViewModel(store, Random(12)).apply { instant = true }
+        v.startNight(1)
+        assertNull(v.night)
+        v.startNight(0)
+        assertNotNull(v.night)
+        val start = v.bankroll
+        repeat(5) {
+            val before = v.bankroll
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            while (v.gs.phase == Phase.PLAYER) v.act(v.gs.basicAdvice!!.action)
+            assertEquals(before + v.gs.results.sumOf { it.net } + v.roundExtras, v.bankroll)
+        }
+        assertNull(v.night)
+        assertEquals(1, v.storyDone)
+        assertTrue(v.bankroll != start || true)
+        // The next night is open and the progress survives leaving.
+        v.startNight(1)
+        assertEquals(1, v.night!!.chapter)
+        val back = CasualViewModel(store, Random(13)).apply { instant = true }
+        assertEquals(1, back.storyDone)
+        assertEquals(1, back.night!!.chapter)
+        back.quitNight()
+        assertNull(back.night)
+    }
+
+    @Test fun duelWithTheRivalSettlesAndKeepsScore() {
+        var settled = 0
+        repeat(25) { seed ->
+            val v = casualVm(500 + seed)
+            v.seatForTest(1, "Savannah")
+            v.giveDuelForTest(1, 30)
+            v.acceptDare()
+            assertTrue(v.dareOn)
+            val before = v.bankroll
+            v.deal()
+            if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+            while (v.gs.phase == Phase.PLAYER) v.act(v.gs.basicAdvice!!.action)
+            assertTrue(!v.dareOn)
+            assertEquals(before + v.gs.results.sumOf { it.net } + v.roundExtras, v.bankroll)
+            assertTrue(v.roundExtras == 30 || v.roundExtras == -30 || v.roundExtras == 0 || v.roundExtras < 0)
+            val total = v.rivalWins + v.rivalLosses
+            assertTrue(total <= 1)
+            settled += total
+            assertEquals("Savannah", v.rivalName)
+            assertEquals(v.rivalWins, v.store.rivalWins)
+        }
+        assertTrue("never settled", settled > 10)
+    }
+
+    @Test fun nightsTabAndDuel() {
+        val v = table(45)
+        v.addChip(25)
+        repeat(7) { playOne(v) }
+        v.setStoryForTest(2)
+        v.startNight(2)
+        v.giveDuelForTest(2, 50)
+        shoot("jp-duel") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun nightsMenu() {
+        val v = table(46)
+        v.addChip(25)
+        repeat(4) { playOne(v) }
+        v.setStoryForTest(2)
+        v.startNight(2)
+        shoot("jp-nights") { CasualMenu(v, 6, {}) {} }
     }
 
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }

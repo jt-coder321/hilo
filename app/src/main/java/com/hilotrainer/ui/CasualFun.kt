@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,6 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hilotrainer.engine.Tiers
 import com.hilotrainer.engine.PowerUp
+import com.hilotrainer.engine.Rival
+import com.hilotrainer.engine.Story
+import com.hilotrainer.engine.NightState
 import com.hilotrainer.engine.NextCard
 import com.hilotrainer.engine.Wheel
 import kotlinx.coroutines.launch
@@ -74,9 +78,13 @@ fun FunBadges(vm: CasualViewModel, onWheel: () -> Unit, modifier: Modifier = Mod
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(listOf(Color(0xFFF6DA8C), Gold))).clickable(onClick = onWheel).padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
+        vm.nightBadge?.let { b ->
+            Text(b, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 170.dp).clip(RoundedCornerShape(50)).background(Cream).padding(horizontal = 9.dp, vertical = 3.dp))
+        }
         val d = vm.dare
         if (vm.dareOn && d != null) {
-            Text("Dare ${money(d.stake)} vs ${d.name}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Cream, modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xCC6A1B1B)).padding(horizontal = 9.dp, vertical = 3.dp))
+            Text(if (d.duel) "Duel ${money(d.stake)} vs ${d.name}" else "Dare ${money(d.stake)} vs ${d.name}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Cream, modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xCC6A1B1B)).padding(horizontal = 9.dp, vertical = 3.dp))
         }
     }
 }
@@ -92,8 +100,9 @@ fun DareRow(vm: CasualViewModel, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text("${d.name} dares you", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Gold, maxLines = 1)
-            Text("Win this hand +${money(d.stake)}. Lose it -${money(d.stake)}.", fontSize = 11.sp, color = Cream, maxLines = 1)
+            // One line, so it always fits in the chat zone on the cover screen.
+            Text(if (d.duel) "${d.name}: head to head, ${money(d.stake)}" else "${d.name} dares you: ${money(d.stake)} on this hand", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Gold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (d.duel) Text(Rival.scoreText(vm.rivalWins, vm.rivalLosses, d.name), fontSize = 10.sp, color = Cream.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text("Pass", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Cream, modifier = Modifier.clip(RoundedCornerShape(50)).border(1.dp, Cream.copy(alpha = 0.5f), RoundedCornerShape(50)).clickable { vm.declineDare() }.padding(horizontal = 12.dp, vertical = 6.dp))
         Text("Take it", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.graphicsLayer { alpha = if (can) 1f else 0.4f }.clip(RoundedCornerShape(50)).background(Gold).clickable(enabled = can) { vm.acceptDare() }.padding(horizontal = 12.dp, vertical = 6.dp))
@@ -356,5 +365,60 @@ private fun MiniRow(title: String, desc: String, amount: Int, onTap: () -> Unit)
             Modifier.size(52.dp).clickable(onClick = onTap).border(1.5.dp, Gold.copy(alpha = if (amount > 0) 0.9f else 0.45f), CircleShape).semantics { contentDescription = "$title bet ${if (amount == 0) "off" else money(amount)}. Tap to change" },
             contentAlignment = Alignment.Center,
         ) { if (amount > 0) CasualChipStack(amount, 32.dp) else Text("+", color = Gold.copy(alpha = 0.7f), fontSize = 22.sp) }
+    }
+}
+
+/** The story nights and your rival. Casual only. */
+@Composable
+fun NightsTab(vm: CasualViewModel) {
+    val unit = vm.settings.tableMin
+    Text(Story.NAME.uppercase(), fontSize = 12.sp, letterSpacing = 2.sp, color = Gold)
+    Text("Short evenings with a goal. Finish one to unlock the next and earn chips and a power-up. Casual only: nothing here touches training.", fontSize = 12.sp, color = Cream.copy(alpha = 0.7f))
+    val run = vm.night
+    Story.chapters.forEachIndexed { i, c ->
+        val unlocked = i <= vm.storyDone
+        val done = i < vm.storyDone
+        val active = run?.chapter == i
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (active) Gold.copy(alpha = 0.22f) else Color(0x14FFFFFF))
+                .border(if (active) 2.dp else 0.dp, if (active) Gold else Color.Transparent, RoundedCornerShape(14.dp)).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Night ${i + 1}: ${c.title}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (unlocked) Cream else Cream.copy(alpha = 0.45f), modifier = Modifier.weight(1f))
+                if (done) Text("Done", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Ink, modifier = Modifier.clip(RoundedCornerShape(50)).background(Gold).padding(horizontal = 10.dp, vertical = 2.dp))
+            }
+            if (unlocked) {
+                Text(c.intro, fontSize = 12.sp, color = Cream.copy(alpha = 0.8f))
+                Text("Goal: ${Story.describe(c, unit)}. Reward ${money(c.rewardUnits * unit)} and a power-up.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Gold)
+                if (active && run != null) {
+                    val (now, target) = Story.progress(c, run, vm.bankroll, unit)
+                    Text(Story.badge(c, run, vm.bankroll, unit, i), fontSize = 12.sp, color = Cream)
+                    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x33FFFFFF))) {
+                        Box(Modifier.fillMaxWidth((now.toFloat() / target).coerceIn(0f, 1f)).height(6.dp).background(Gold))
+                    }
+                    Text("Give up this night", fontSize = 12.sp, color = Cream.copy(alpha = 0.7f), modifier = Modifier.clickable { vm.quitNight() }.padding(vertical = 4.dp))
+                } else if (run == null) {
+                    GoldButton(if (done) "Play again" else "Start", Modifier.width(140.dp), primary = !done) { vm.startNight(i) }
+                }
+            } else {
+                Text("Finish Night $i to unlock.", fontSize = 12.sp, color = Cream.copy(alpha = 0.5f))
+            }
+        }
+    }
+    val rival = vm.rivalName
+    Spacer(Modifier.height(6.dp))
+    Text("YOUR RIVAL", fontSize = 12.sp, letterSpacing = 2.sp, color = Gold)
+    if (rival == null) {
+        Text("Nobody yet. Play a few hands and someone at the table will pick a fight.", fontSize = 12.sp, color = Cream.copy(alpha = 0.7f))
+    } else {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x14FFFFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(rival, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Cream)
+                Text(Rival.scoreText(vm.rivalWins, vm.rivalLosses, rival), fontSize = 12.sp, color = Cream.copy(alpha = 0.75f))
+            }
+            Text("${vm.rivalWins} to ${vm.rivalLosses}", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Gold)
+        }
+        Text("Head to head: whoever ends with the better hand wins the side stake. A bust loses, a blackjack beats any 21.", fontSize = 12.sp, color = Cream.copy(alpha = 0.65f))
     }
 }

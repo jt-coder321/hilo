@@ -104,6 +104,48 @@ class JustPlayTest {
         assertEquals(3, PowerUp.entries.size)
     }
 
+    @Test fun rivalCompareAndStoryRules() {
+        fun h(vararg r: Rank) = Hand(cards = r.map { Card(it, Suit.CLUBS) })
+        val bust = h(Rank.KING, Rank.QUEEN, Rank.FIVE)
+        val twenty = h(Rank.KING, Rank.QUEEN)
+        val nineteen = h(Rank.KING, Rank.NINE)
+        val bj = h(Rank.ACE, Rank.KING)
+        assertEquals(1, Rival.compare(listOf(twenty), nineteen))
+        assertEquals(-1, Rival.compare(listOf(nineteen), twenty))
+        assertEquals(0, Rival.compare(listOf(twenty), twenty))
+        assertEquals(1, Rival.compare(listOf(nineteen), bust))
+        assertEquals(-1, Rival.compare(listOf(bust), nineteen))
+        assertEquals(0, Rival.compare(listOf(bust), bust))
+        assertEquals(1, Rival.compare(listOf(bj), h(Rank.KING, Rank.FIVE, Rank.SIX)))
+        assertEquals(1, Rival.compare(listOf(bust, nineteen), twenty.copy(cards = twenty.cards.take(1) + Card(Rank.EIGHT, Suit.HEARTS))))
+        assertEquals("You lead Reggie 3 to 2", Rival.scoreText(3, 2, "Reggie"))
+        assertEquals("Reggie leads 4 to 1", Rival.scoreText(1, 4, "Reggie"))
+        // Nights: goals, limits, and saving a run as text.
+        val c = Story.chapters
+        assertEquals(6, c.size)
+        var run = NightRun(0, 1000)
+        repeat(4) { run = Story.after(run, 10, 1, false) }
+        assertEquals(NightState.ACTIVE, Story.state(c[0], run, 1040, 10))
+        run = Story.after(run, -10, 0, false)
+        assertEquals(NightState.DONE, Story.state(c[0], run, 1030, 10))
+        // A streak resets on a loss and a push leaves it alone.
+        var s2 = NightRun(2, 1000)
+        s2 = Story.after(s2, 10, 1, false); s2 = Story.after(s2, 0, 0, false); s2 = Story.after(s2, 10, 1, false)
+        assertEquals(2, s2.best)
+        s2 = Story.after(s2, -10, 0, false)
+        assertEquals(0, s2.streak); assertEquals(2, s2.best)
+        // Out of hands without the goal fails the night.
+        var f = NightRun(1, 1000, hands = 14)
+        f = Story.after(f, -10, 0, false)
+        assertEquals(NightState.FAILED, Story.state(c[1], f, 990, 10))
+        assertEquals(NightState.DONE, Story.state(c[1], f, 1080, 10))
+        assertEquals(f, NightRun.decode(f.encode()))
+        assertNull(NightRun.decode("nonsense"))
+        val words = Rival.challenge + Rival.accepted + Rival.declined + Rival.iWin + Rival.iLose + Rival.push + Rival.taunts +
+            c.flatMap { listOf(it.title, it.intro, it.outro, Story.describe(it, 10)) }
+        words.forEach { assertFalse(it, it.contains('\u2014') || it.contains('\u2013') || it.contains(" - ")) }
+    }
+
     @Test fun talkAvoidsRepeats() {
         TableTalk.resetMemory()
         val r = Random(3)

@@ -419,7 +419,7 @@ private fun ReactionIcon(seed: Int, color: Color, modifier: Modifier) {
 @Composable
 private fun Captions(vm: CasualViewModel, modifier: Modifier) {
     val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
-    val lines = vm.chat.toList().takeLast(if (dareShown) 2 else 3)
+    val lines = vm.chat.toList().takeLast(if (dareShown) 1 else 3)
     Column(
         modifier.clip(androidx.compose.ui.graphics.RectangleShape)
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = if (lines.isEmpty()) 0f else 0.32f)))),
@@ -452,7 +452,7 @@ private fun Captions(vm: CasualViewModel, modifier: Modifier) {
 private fun TableLog(vm: CasualViewModel, modifier: Modifier) {
     Column(modifier.clip(androidx.compose.ui.graphics.RectangleShape), verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.Bottom)) {
         val dareShown = vm.dare != null && !vm.dareOn && vm.canBet
-        val lines = vm.chat.toList().takeLast(if (dareShown) 3 else 4)
+        val lines = vm.chat.toList().takeLast(if (dareShown) 2 else 4)
         lines.forEachIndexed { i, l ->
             key(l.key) {
                 val a = remember { Animatable(0f) }

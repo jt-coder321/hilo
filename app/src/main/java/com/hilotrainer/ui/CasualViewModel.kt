@@ -38,6 +38,10 @@ import com.hilotrainer.engine.TableLife
 import com.hilotrainer.engine.MoreTalk
 import com.hilotrainer.engine.Card
 import com.hilotrainer.engine.PowerUp
+import com.hilotrainer.engine.Rival
+import com.hilotrainer.engine.Story
+import com.hilotrainer.engine.NightRun
+import com.hilotrainer.engine.NightState
 import com.hilotrainer.engine.LuckyLadies
 import com.hilotrainer.engine.NextCard
 import com.hilotrainer.engine.TableTalk
@@ -130,6 +134,25 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         l.addAll(store.powerUps())
     }
     var armedRefund by mutableStateOf(false); private set
+
+    /** The rival who keeps score against you, and the story night you are playing. Casual only. */
+    var rivalName by mutableStateOf(store.rivalName); private set
+    var rivalWins by mutableIntStateOf(store.rivalWins); private set
+    var rivalLosses by mutableIntStateOf(store.rivalLosses); private set
+    var storyDone by mutableIntStateOf(store.storyDone); private set
+    var night by mutableStateOf(NightRun.decode(store.nightRun)); private set
+    val nightBadge: String? get() = night?.let { r -> Story.chapters.getOrNull(r.chapter)?.let { Story.badge(it, r, bankroll, settings.tableMin, r.chapter) } }
+
+    fun startNight(i: Int) {
+        if (!canBet || night != null || i !in 0..storyDone || i !in Story.chapters.indices) return
+        val c = Story.chapters[i]
+        night = NightRun(i, bankroll); store.nightRun = night!!.encode()
+        perk("Night ${i + 1}: ${c.title}", Story.describe(c, settings.tableMin))
+        say(DEALER, c.intro)
+        fx(Fx.CHIP)
+    }
+
+    fun quitNight() { night = null; store.nightRun = null }
     var armedCover by mutableStateOf(false); private set
     /** The hole card, shown after a Hole peek and only for this round. */
     var peeked by mutableStateOf<Card?>(null); private set
@@ -210,14 +233,14 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         val d = dare ?: return
         if (!canBet || dareOn || bankroll < bet + d.stake) return
         dareOn = true
-        say(d.seat, Dares.accepted[rnd.nextInt(Dares.accepted.size)], d.name)
+        say(d.seat, (if (d.duel) Rival.accepted else Dares.accepted).let { it[rnd.nextInt(it.size)] }, d.name)
         fx(Fx.CHIP)
     }
     fun declineDare() {
         val d = dare ?: return
         if (dareOn) return
         dare = null
-        say(d.seat, Dares.declined[rnd.nextInt(Dares.declined.size)], d.name)
+        say(d.seat, (if (d.duel) Rival.declined else Dares.declined).let { it[rnd.nextInt(it.size)] }, d.name)
     }
 
     /** Spin the bonus wheel earned by a streak. Returns the segment it lands on. */
@@ -244,6 +267,28 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     internal fun drinkForTest(n: Int) { drinkHands = n }
     internal fun giveDareForTest(seat: Int, stake: Int) { dare = Dare(seat, life.seats[seat]?.who?.name ?: "Someone", stake, "Bet you can't beat the dealer this hand. \$$stake says you can't.") }
 
+    private fun settleDuel(d: Dare, extra: (Int) -> Unit) {
+        val b = roundSeats.indexOfFirst { it.second == d.seatId }
+        val theirs = gs.bots.getOrNull(b)
+        if (b < 0 || theirs == null) { say(d.seat, "We didn't get our hand in. Rain check.", d.name); return }
+        val tag = money(d.stake)
+        when (Rival.compare(gs.hands, theirs)) {
+            1 -> {
+                extra(d.stake); rivalWins += 1; store.rivalWins = rivalWins
+                val sc = Rival.scoreText(rivalWins, rivalLosses, d.name)
+                say(d.seat, Rival.iLose[rnd.nextInt(Rival.iLose.size)].replace("\$STAKE", tag).replace("\$SCORE", sc + "."), d.name)
+                perk("Rival: you won ${tag}", sc)
+            }
+            -1 -> {
+                extra(-minOf(d.stake, bankroll)); rivalLosses += 1; store.rivalLosses = rivalLosses
+                val sc = Rival.scoreText(rivalWins, rivalLosses, d.name)
+                say(d.seat, Rival.iWin[rnd.nextInt(Rival.iWin.size)].replace("\$STAKE", tag).replace("\$SCORE", sc + "."), d.name)
+                perk("Rival: ${d.name} won ${tag}", sc)
+            }
+            else -> say(d.seat, Rival.push[rnd.nextInt(Rival.push.size)], d.name)
+        }
+    }
+
     private fun funAfterRound(handNet: Int, net: Int, wins: Int) {
         roundExtras = 0
         fun extra(n: Int) { credit(n); roundExtras += n }
@@ -263,6 +308,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (d != null) {
             dare = null; dareOn = false
             val tag = money(d.stake)
+            if (d.duel) settleDuel(d, ::extra) else
             when {
                 handNet > 0 -> { extra(d.stake); say(d.seat, Dares.won[rnd.nextInt(Dares.won.size)].replace("\$STAKE", tag), d.name) }
                 handNet < 0 -> { extra(-minOf(d.stake, bankroll)); say(d.seat, Dares.lost[rnd.nextInt(Dares.lost.size)].replace("\$STAKE", tag), d.name) }
@@ -290,6 +336,23 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         if (wins > 0 && net > 0 && stats.winStreak > 0 && stats.winStreak % 3 == 0 && !wheelReady) {
             wheelReady = true
             perk("Bonus wheel!", "${stats.winStreak} wins in a row. Tap Spin the wheel.")
+        }
+        // Your rival challenges you head to head.
+        if (dare == null && settings.tableTalk && bankroll >= settings.tableMin * 15 && stats.hands >= 6) {
+            val rivalSeat = if (rivalName == null) null else life.seats.indices.firstOrNull { life.seats[it]?.who?.name == rivalName }
+            val eligible = life.seats.indices.filter { life.seats[it]?.who?.name in Rival.ELIGIBLE }
+            if (rivalSeat != null && rnd.nextInt(100) < 30) {
+                val st = life.seats[rivalSeat]!!
+                val dd = Rival.make(rivalSeat, st.id, st.who.name, settings.tableMin, rnd)
+                dare = dd; say(rivalSeat, dd.line, dd.name)
+            } else if (rivalName == null && eligible.isNotEmpty() && rnd.nextInt(100) < 25) {
+                val i = eligible[rnd.nextInt(eligible.size)]
+                val st = life.seats[i]!!
+                rivalName = st.who.name; store.rivalName = rivalName
+                perk("New rival: ${st.who.name}", "They want a running score against you. Watch for their challenges.")
+                val dd = Rival.make(i, st.id, st.who.name, settings.tableMin, rnd)
+                dare = dd; say(i, dd.line, dd.name)
+            }
         }
         // Someone dares you between hands, now and then.
         if (dare == null && settings.tableTalk && bankroll >= settings.tableMin * 10 && rnd.nextInt(100) < 12) {
@@ -685,6 +748,29 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         }
     }
 
+    private fun updateNight(handNet: Int, wins: Int, doubledWin: Boolean) {
+        val run = night ?: return
+        val c = Story.chapters.getOrNull(run.chapter) ?: run { night = null; store.nightRun = null; return }
+        val next = Story.after(run, handNet, wins, doubledWin)
+        when (Story.state(c, next, bankroll, settings.tableMin)) {
+            NightState.DONE -> {
+                night = null; store.nightRun = null
+                storyDone = maxOf(storyDone, run.chapter + 1); store.storyDone = storyDone
+                val prize = c.rewardUnits * settings.tableMin
+                credit(prize); roundExtras += prize
+                perk("Night ${run.chapter + 1} complete: ${c.title}", "+${money(prize)} and a power-up." + if (run.chapter == Story.chapters.lastIndex) " ${Story.NAME} is finished." else "")
+                say(DEALER, c.outro)
+                grantPower("A story night reward.")
+            }
+            NightState.FAILED -> {
+                night = null; store.nightRun = null
+                perk("Night ${run.chapter + 1} missed", "Out of hands. Start it again from the Nights tab.")
+                say(DEALER, "Not tonight. The weekend will still be here.")
+            }
+            NightState.ACTIVE -> { night = next; store.nightRun = next.encode() }
+        }
+    }
+
     /** Refunds from armed power-ups, then maybe a new power-up as a reward. Every credit is counted in [roundExtras]. */
     private fun settlePowerUps(g: GameState, handNet: Int, dealerBj: Boolean, bj: Boolean) {
         var back = 0
@@ -736,6 +822,7 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
 
         if (!watching) funAfterRound(handNet, net, wins)
         if (!watching) settlePowerUps(g, handNet, dealerBj, bj)
+        if (!watching) updateNight(handNet, wins, g.hands.zip(g.results).any { (h, r) -> h.doubled && r.net > 0 })
 
         val first = g.results.firstOrNull()
         val title = when {
@@ -877,6 +964,8 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
             delay(7000L + rnd.nextLong(0, 9000))
             if (busy || !settings.tableTalk || eventsJob?.isActive == true) continue
             val seated = life.seats.indices.filter { life.seats[it] != null }
+            val rs = if (rivalName == null) null else life.seats.indices.firstOrNull { life.seats[it]?.who?.name == rivalName }
+            if (rs != null && rnd.nextInt(100) < 22) { say(rs, Rival.taunts[rnd.nextInt(Rival.taunts.size)]); continue }
             if (seated.size >= 2 && rnd.nextInt(100) < 24) { banter(seated); continue }
             if (seated.isNotEmpty() && drinkHands == 0 && rnd.nextInt(100) < 7) { sendDrink(seated[rnd.nextInt(seated.size)]); continue }
             if (rnd.nextInt(100) < dealer.talky) { say(DEALER, TableTalk.dealer(dealer.chatter, rnd)); continue }
@@ -925,6 +1014,12 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
         life.seats[seat] = Seat(1000L + seat, who, 50 * settings.tableMin, 50 * settings.tableMin, who.baseUnits * settings.tableMin, plan = 99, heat = heat)
         seatView = life.seats.toList()
     }
+    internal fun giveDuelForTest(seat: Int, stake: Int) {
+        val st = life.seats[seat]!!
+        rivalName = st.who.name
+        dare = Dare(seat, st.who.name, stake, "Head to head, you and me. \$$stake says my hand beats yours.", duel = true, seatId = st.id)
+    }
+    internal fun setStoryForTest(done: Int) { storyDone = done; store.storyDone = done }
     internal fun procForTest(stage: Int, peek: Boolean) { proc = stage; peeking = peek }
     internal fun signalForTest(text: String) { actions[YOU] = text }
     internal fun sayForTest(where: Int, text: String, minor: Boolean = false) = say(where, text, minor = minor)
