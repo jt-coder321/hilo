@@ -311,6 +311,15 @@ private fun ControlsPage(s: AppSettings, update: (AppSettings) -> Unit) {
         Setting("Sound effects", "Cards, chips and results.", s.sound) { update(s.copy(sound = it)) }
         Setting("Dealer talks", "The dealer calls hands out loud. Needs sound on.", s.dealerVoice) { update(s.copy(dealerVoice = it)) }
         Setting("Vibration", value = s.haptics) { update(s.copy(haptics = it)) }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        val runStore = remember { CasualStore(ctx.applicationContext) }
+        var runSound by remember { mutableStateOf(runStore.runSound) }
+        Setting("Rogue Run sound effects", "Card deals, score ticks, perk chimes and stingers in Rogue Run. Effects only, no music.", runSound) { runSound = it; runStore.runSound = it }
+        var runReduce by remember { mutableStateOf(!runStore.runMotion) }
+        Setting("Rogue Run reduce motion", "Turns off Rogue Run animation, shakes and flashes. Also follows Android's animation setting.", runReduce) { runReduce = it; runStore.runMotion = !it }
+        var runQ by remember { mutableStateOf(runStore.runQuality) }
+        Setting("Rogue Run light effects", "Fewer particles and glows for a smoother table. Turn on if it ever stutters.", runQ == 0) { runQ = if (it) 0 else 1; runStore.runQuality = runQ }
+        Setting("Rogue Run extra effects", "More particles, rays and glow. Needs light effects off.", runQ == 2) { runQ = if (it) 2 else 1; runStore.runQuality = runQ }
     }
     Group("Controls") {
         Setting("Left-handed", "Moves the main buttons and side panels to the left.", s.leftHanded) { update(s.copy(leftHanded = it)) }

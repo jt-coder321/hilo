@@ -16,19 +16,60 @@ enum class RunPhase { SELECT, PLAY, CLEARED, SHOP, OVER, WON }
 data class HandCtx(
     val outcome: Outcome, val cards: List<Card>, val total: Int, val soft: Boolean, val doubled: Boolean, val split: Boolean,
     val dealerBust: Boolean, val stake: Int, val winStreak: Int, val lossesThisBlind: Int, val trueCount: Double,
+    val money: Int = 0, val perkCount: Int = 0,
+    val dealerTotal: Int = 0, val handsLeft: Int = 0, val firstHand: Boolean = false, val short: Int = 0, val ante: Int = 1,
+    val boss: Boolean = false, val cleared: Int = 0,
 ) {
     val won: Boolean get() = outcome == Outcome.WIN || outcome == Outcome.BLACKJACK
     val blackjack: Boolean get() = outcome == Outcome.BLACKJACK
 }
 
-data class Trigger(val perk: String, val text: String)
+data class Trigger(val perk: String, val text: String, val chips: Int = 0, val mult: Double = 0.0, val x: Double = 1.0, val money: Int = 0)
+
+/** The kind of win a hand is. Each kind has its own base chips and mult, and can be trained up in the shop. */
+enum class HandType(val label: String, val chips: Int, val mult: Double, val lvChips: Int, val lvMult: Double, val how: String) {
+    WIN("Winner", 50, 1.0, 20, 1.0, "Any win"),
+    BUST("Dealer Bust", 60, 2.0, 25, 1.0, "The dealer goes over 21"),
+    TWENTY_ONE("Twenty-One", 70, 2.0, 25, 1.0, "Win with exactly 21, not a blackjack"),
+    SPLIT("Split Win", 80, 2.0, 30, 1.0, "Win a hand you split"),
+    DOUBLE("Double Down", 90, 2.0, 30, 1.0, "Win a hand you doubled"),
+    CHARLIE("Five Card Charlie", 120, 3.0, 40, 2.0, "Win with five or more cards"),
+    BLACKJACK("Blackjack", 100, 3.0, 40, 2.0, "A natural 21");
+
+    companion object {
+        /** A win counts as the rarest kind it qualifies for. */
+        fun of(c: HandCtx): HandType = when {
+            c.blackjack -> BLACKJACK
+            c.cards.size >= 5 -> CHARLIE
+            c.doubled -> DOUBLE
+            c.split -> SPLIT
+            c.total == 21 -> TWENTY_ONE
+            c.dealerBust -> BUST
+            else -> WIN
+        }
+    }
+}
+
+/** Extra shine on a perk. Every edition scores on every winning hand, whatever the perk itself does. */
+enum class Edition(val label: String, val extra: Int, val desc: String) {
+    NONE("", 0, ""),
+    FOIL("Foil", 2, "+40 chips on every win"),
+    HOLO("Holo", 3, "+6 mult on every win"),
+    POLY("Poly", 5, "x1.5 mult on every win"),
+    NEGATIVE("Negative", 4, "Takes no perk slot"),
+}
 
 /** What the perks add to one hand's score. */
 class Fx {
     var chips = 0; var mult = 0.0; var xmult = 1.0; var money = 0
     val notes = mutableListOf<Trigger>()
     fun hit(perk: String, text: String, chips: Int = 0, mult: Double = 0.0, x: Double = 1.0, money: Int = 0) {
-        this.chips += chips; this.mult += mult; this.xmult *= x; this.money += money; notes += Trigger(perk, text)
+        this.chips += chips; this.mult += mult; this.xmult *= x; this.money += money; notes += Trigger(perk, text, chips, mult, x, money)
+    }
+    /** Fold another perk's result in under a new label (Copycat). */
+    fun merge(o: Fx, label: String) {
+        chips += o.chips; mult += o.mult; xmult *= o.xmult; money += o.money
+        o.notes.forEach { notes += it.copy(perk = label) }
     }
 }
 
@@ -37,12 +78,23 @@ class Perk(
     val handsBonus: Int = 0, val interestBonus: Int = 0, val comboBonus: Boolean = false, val showsCount: Boolean = false,
     val clearMoney: Int = 0, val saveFirstLoss: Boolean = false,
     val effect: (Perk.(HandCtx, Fx) -> Unit)? = null,
+    /** Late perks score after the others, so they can react to what fired. */
+    val late: Boolean = false,
+    val edition: Edition = Edition.NONE,
+    /** Growth some perks collect over the run. */
+    var grow: Int = 0,
 ) {
     val sell: Int get() = (cost / 2).coerceAtLeast(1)
+    val title: String get() = if (edition == Edition.NONE) name else "${edition.label} $name"
+    fun copyWith(edition: Edition = this.edition, grow: Int = this.grow): Perk {
+        val extra = edition.extra - this.edition.extra
+        return Perk(id, name, rarity, cost + extra, desc, handsBonus, interestBonus, comboBonus, showsCount, clearMoney, saveFirstLoss, effect, late, edition, grow)
+    }
 }
 
 object Perks {
     private fun p(id: String, name: String, r: Rarity, cost: Int, desc: String, effect: Perk.(HandCtx, Fx) -> Unit) = Perk(id, name, r, cost, desc, effect = effect)
+    private fun late(id: String, name: String, r: Rarity, cost: Int, desc: String, effect: Perk.(HandCtx, Fx) -> Unit) = Perk(id, name, r, cost, desc, effect = effect, late = true)
 
     val ALL: List<Perk> = listOf(
         p("sevens", "Lucky Sevens", Rarity.COMMON, 4, "Winning hands score +50 chips for each 7 in them.") { c, f ->
@@ -105,9 +157,101 @@ object Perks {
         p("echo", "Echo", Rarity.RARE, 8, "Wins over a busted dealer score x1.5 mult.") { c, f ->
             if (c.won && c.dealerBust) f.hit(name, "x1.5 mult", x = 1.5)
         },
+        p("bustbuster", "Bust Buster", Rarity.COMMON, 5, "Wins over a busted dealer score +4 mult.") { c, f ->
+            if (c.won && c.dealerBust) f.hit(name, "+4 mult", mult = 4.0)
+        },
+        p("collector", "Chip Collector", Rarity.COMMON, 5, "Winning hands score +12 chips for every perk you hold.") { c, f ->
+            if (c.won && c.perkCount > 0) f.hit(name, "+${12 * c.perkCount} chips", chips = 12 * c.perkCount)
+        },
+        p("natural", "Natural", Rarity.COMMON, 5, "Blackjacks score +120 chips.") { c, f ->
+            if (c.blackjack) f.hit(name, "+120 chips", chips = 120)
+        },
+        Perk("consol", "Consolation", Rarity.COMMON, 5, "Earn \$2 whenever you lose a hand."),
+        p("hot", "Hot Hand", Rarity.UNCOMMON, 6, "Wins score +1 mult for every win in your current streak.") { c, f ->
+            if (c.won && c.winStreak > 0) f.hit(name, "+${c.winStreak} mult", mult = c.winStreak.toDouble())
+        },
+        p("heavy", "Light Touch", Rarity.UNCOMMON, 6, "Wins at stake 1 score +8 mult.") { c, f ->
+            if (c.won && c.stake == 1) f.hit(name, "+8 mult", mult = 8.0)
+        },
+        p("snow", "Snowball", Rarity.UNCOMMON, 7, "Wins score +2 mult. Grows by +1 mult every time you clear a blind.") { c, f ->
+            if (c.won) f.hit(name, "+${2 + grow} mult", mult = 2.0 + grow)
+        },
+        p("fat", "Fat Stack", Rarity.UNCOMMON, 6, "Winning hands score +1 mult for every \$10 you hold.") { c, f ->
+            if (c.won && c.money >= 10) f.hit(name, "+${c.money / 10} mult", mult = (c.money / 10).toDouble())
+        },
+        late("chain", "Chain Reaction", Rarity.UNCOMMON, 7, "Wins score +3 mult for every other perk that fired on the hand.") { c, f ->
+            val n = f.notes.map { it.perk }.distinct().size
+            if (c.won && n > 0) f.hit(name, "+${3 * n} mult ($n fired)", mult = 3.0 * n)
+        },
+        Perk("scholar", "Scholar", Rarity.UNCOMMON, 7, "Every hand level you train is worth double."),
+        Perk("copy", "Copycat", Rarity.RARE, 10, "Copies the perk to its right."),
+        p("lowball", "Lowball", Rarity.COMMON, 4, "Wins with a total of 17 or less score +60 chips.") { c, f ->
+            if (c.won && !c.blackjack && c.total <= 17) f.hit(name, "+60 chips", chips = 60)
+        },
+        p("tenstack", "Ten Stack", Rarity.COMMON, 5, "Winning hands score +20 chips for each ten, jack, queen or king in them.") { c, f ->
+            val n = c.cards.count { it.rank.value == 10 }; if (c.won && n > 0) f.hit(name, "+${20 * n} chips", chips = 20 * n)
+        },
+        p("acehigh", "Ace High", Rarity.COMMON, 5, "Winning hands score +40 chips for each Ace in them.") { c, f ->
+            val n = c.cards.count { it.rank.isAce }; if (c.won && n > 0) f.hit(name, "+${40 * n} chips", chips = 40 * n)
+        },
+        p("rainbow", "Rainbow", Rarity.COMMON, 5, "Winning hands with three or more different suits score +4 mult.") { c, f ->
+            if (c.won && c.cards.map { it.suit }.distinct().size >= 3) f.hit(name, "+4 mult", mult = 4.0)
+        },
+        p("flush", "Flush", Rarity.UNCOMMON, 6, "Winning hands of three or more cards in one suit score x2 mult.") { c, f ->
+            if (c.won && c.cards.size >= 3 && c.cards.map { it.suit }.distinct().size == 1) f.hit(name, "x2 mult (flush)", x = 2.0)
+        },
+        p("pairup", "Pair Up", Rarity.COMMON, 5, "Winning hands that start with a pair score +5 mult.") { c, f ->
+            if (c.won && c.cards.size >= 2 && c.cards[0].rank == c.cards[1].rank) f.hit(name, "+5 mult", mult = 5.0)
+        },
+        p("lastcall", "Last Call", Rarity.UNCOMMON, 6, "Wins on the last hand of a blind score x2 mult.") { c, f ->
+            if (c.won && c.handsLeft == 0) f.hit(name, "x2 mult (last hand)", x = 2.0)
+        },
+        p("opener", "Opening Bet", Rarity.COMMON, 5, "Wins on the first hand of a blind score +80 chips.") { c, f ->
+            if (c.won && c.firstHand) f.hit(name, "+80 chips", chips = 80)
+        },
+        p("comeback", "Comeback", Rarity.UNCOMMON, 7, "Wins score +1 mult for every 100 chips you are still short of the target.") { c, f ->
+            val n = (c.short / 100).coerceAtMost(15); if (c.won && n > 0) f.hit(name, "+$n mult", mult = n.toDouble())
+        },
+        p("overkill", "Twenty-One Club", Rarity.UNCOMMON, 6, "Wins with exactly 21 score +8 mult.") { c, f ->
+            if (c.won && c.total == 21) f.hit(name, "+8 mult", mult = 8.0)
+        },
+        p("bossbane", "Boss Bane", Rarity.UNCOMMON, 7, "Wins in a boss blind score x2 mult.") { c, f ->
+            if (c.won && c.boss) f.hit(name, "x2 mult (boss)", x = 2.0)
+        },
+        p("allin", "All In", Rarity.RARE, 9, "Wins at stake 3 score +100 chips for every ante you have reached.") { c, f ->
+            if (c.won && c.stake == 3) f.hit(name, "+${100 * c.ante} chips", chips = 100 * c.ante)
+        },
+        p("veteran", "Veteran", Rarity.UNCOMMON, 6, "Wins score +2 mult for every ante you have reached.") { c, f ->
+            if (c.won) f.hit(name, "+${2 * c.ante} mult", mult = 2.0 * c.ante)
+        },
+        p("tipjar", "Tip Jar", Rarity.COMMON, 4, "Earn \$2 whenever you win with a blackjack.") { c, f ->
+            if (c.blackjack) f.hit(name, "+\$2", money = 2)
+        },
+        p("parlay", "Parlay", Rarity.UNCOMMON, 6, "Earn \$1 for every win in a streak after the first.") { c, f ->
+            if (c.won && c.winStreak > 1) f.hit(name, "+\$${c.winStreak - 1}", money = c.winStreak - 1)
+        },
+        Perk("payday", "Payday", Rarity.UNCOMMON, 8, "Earn \$4 every time you clear a blind.", clearMoney = 4),
+        Perk("pockets", "Deep Pockets", Rarity.RARE, 12, "+2 hands in every blind.", handsBonus = 2),
+        p("gambler", "Gambler's Rush", Rarity.RARE, 9, "Wins score x1.5 mult, but every lost hand costs \$1 more.") { c, f ->
+            if (c.won) f.hit(name, "x1.5 mult", x = 1.5)
+        },
+        Perk("insure", "Insurance Man", Rarity.UNCOMMON, 6, "Lost hands cost \$1 less, never below \$0."),
+        Perk("trainer", "Personal Trainer", Rarity.RARE, 10, "Every blind you clear trains a random hand type one level."),
+        p("grinder", "Grinder", Rarity.UNCOMMON, 6, "Wins score +1 mult for every blind you have cleared this run, up to +10.") { c, f ->
+            val n = c.cleared.coerceAtMost(10); if (c.won && n > 0) f.hit(name, "+$n mult", mult = n.toDouble())
+        },
+        p("sharpshooter", "Sharpshooter", Rarity.RARE, 9, "Wins at a true count of +1 or more score +25 chips per true count point, up to 5.") { c, f ->
+            val n = c.trueCount.toInt().coerceAtMost(5); if (c.won && n >= 1) f.hit(name, "+${25 * n} chips", chips = 25 * n)
+        },
+        Perk("ghost", "Ghost Hand", Rarity.RARE, 9, "A lost hand has a 1 in 4 chance not to use up a hand."),
+        p("bettor", "Heavy Bettor", Rarity.RARE, 9, "Doubled wins score x3 mult.") { c, f ->
+            if (c.won && c.doubled) f.hit(name, "x3 mult", x = 3.0)
+        },
     )
     private val byId = ALL.associateBy { it.id }
     fun get(id: String): Perk? = byId[id]
+    /** A private copy, so growth on one run never leaks into another. */
+    fun fresh(id: String, edition: Edition = Edition.NONE, grow: Int = 0): Perk? = byId[id]?.copyWith(edition, grow)
 }
 
 enum class Tonic(val label: String, val cost: Int, val desc: String) {
@@ -115,11 +259,12 @@ enum class Tonic(val label: String, val cost: Int, val desc: String) {
     COUNT("Count Notes", 3, "Shows the running count during the next blind."),
 }
 
-class Offer(val perk: Perk?, val tonic: Tonic?, var sold: Boolean = false) {
-    val name: String get() = perk?.name ?: tonic!!.label
-    val cost: Int get() = perk?.cost ?: tonic!!.cost
-    val desc: String get() = perk?.desc ?: tonic!!.desc
+class Offer(val perk: Perk?, val tonic: Tonic?, var sold: Boolean = false, val train: HandType? = null, val trainLevel: Int = 0, val pack: Boolean = false) {
+    val name: String get() = perk?.title ?: tonic?.label ?: if (pack) "Perk Pack" else "Train ${train!!.label}"
+    val cost: Int get() = perk?.cost ?: tonic?.cost ?: if (pack) 5 else (3 + trainLevel)
+    val desc: String get() = perk?.desc ?: tonic?.desc ?: if (pack) "Open it and pick 1 of 3 perks. Better odds for shiny editions." else "Level ${trainLevel + 1}: ${train!!.label} wins get +${train.lvChips} chips and +${fmtM(train.lvMult)} mult."
     val rarity: Rarity get() = perk?.rarity ?: Rarity.COMMON
+    private fun fmtM(d: Double) = if (d == d.toInt().toDouble()) "${d.toInt()}" else "$d"
 }
 
 class Boss(
@@ -150,6 +295,7 @@ enum class StartDeck(val label: String, val desc: String, val money: Int, val ha
 data class ScoreEvent(
     val key: Int, val outcome: Outcome, val baseChips: Int, val chips: Int, val mult: Double, val total: Int, val money: Int,
     val triggers: List<Trigger>, val note: String,
+    val type: HandType? = null, val level: Int = 0, val baseMult: Double = 1.0,
 )
 
 data class Cashout(val lines: List<Pair<String, Int>>) { val total: Int get() = lines.sumOf { it.second } }
@@ -172,6 +318,14 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     var blind = 0; private set
     var money = deck.money; private set
     val perks = mutableListOf<Perk>()
+    /** How far each kind of win has been trained. */
+    val levels = IntArray(HandType.entries.size)
+    val slots: Int get() = SLOTS + perks.count { it.edition == Edition.NEGATIVE }
+    var lastTrained: HandType? = null; private set
+    fun level(t: HandType) = levels[t.ordinal]
+    private val levelPower: Int get() = if (perks.any { it.id == "scholar" }) 2 else 1
+    fun baseChips(t: HandType) = t.chips + level(t) * t.lvChips * levelPower
+    fun baseMult(t: HandType) = t.mult + level(t) * t.lvMult * levelPower
     var boss: Boss = Bosses.ALL[rnd.nextInt(Bosses.ALL.size)]; private set
     var game = BlackjackGame(RULES, 1_000_000, rnd, botCount = 2)
         private set
@@ -201,9 +355,14 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     var bestHand = 0; private set
     var skips = 0; private set
     var cause = ""; private set
+    /** The best hand of the run, kept for the replay at the end. */
+    var bestCards: List<Card> = emptyList(); private set
+    var bestType: HandType? = null; private set
+    var bestChips = 0; private set
+    var bestMult = 0.0; private set
 
     init {
-        deck.perk?.let { id -> Perks.get(id)?.let { perks += it } }
+        deck.perk?.let { id -> Perks.fresh(id)?.let { perks += it } }
     }
 
     val gs: GameState get() = game.state()
@@ -242,6 +401,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
     fun skipBlind(): Boolean {
         if (phase != RunPhase.SELECT || isBoss) return false
         money += SKIP_TAG; skips++
+        HandType.entries[rnd.nextInt(HandType.entries.size)].let { levels[it.ordinal]++; lastTrained = it }
         nextBlind()
         return true
     }
@@ -290,6 +450,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         val dBust = handTotal(g.dealerCards).first > 21
         val out = mutableListOf<ScoreEvent>()
         var refunded = false
+        var ghosted = false
         g.hands.forEachIndexed { i, h ->
             val r = g.results.getOrNull(i) ?: return@forEachIndexed
             val (total, soft) = handTotal(h.cards)
@@ -297,29 +458,50 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
             val lost = r.outcome == Outcome.LOSE || r.outcome == Outcome.BUST
             if (won) winStreak++ else if (lost) winStreak = 0
             if (lost) losses++
-            val ctx = HandCtx(r.outcome, h.cards, total, soft, h.doubled, h.isSplitHand, dBust, stake, winStreak, losses - (if (lost) 1 else 0), trueAtDeal)
+            val ctx = HandCtx(r.outcome, h.cards, total, soft, h.doubled, h.isSplitHand, dBust, stake, winStreak, losses - (if (lost) 1 else 0), trueAtDeal, money, perks.size, handTotal(g.dealerCards).first, handsLeft, handsLeft + 1 == handsMax, (target - score).coerceAtLeast(0), ante, isBoss, blindsCleared)
             if (won) {
                 val bossBlocks = activeBoss?.minWinTotal?.let { it > 0 && total < it && r.outcome != Outcome.BLACKJACK } == true
                 if (bossBlocks) {
                     out += ScoreEvent(++evKey, r.outcome, 0, 0, 1.0, 0, 0, emptyList(), "${activeBoss!!.name}: a win under ${activeBoss!!.minWinTotal} scores nothing")
                 } else {
-                    val base = (if (r.outcome == Outcome.BLACKJACK) 75 else 50) * stake * (if (h.doubled) 2 else 1)
+                    val type = HandType.of(ctx)
+                    val base = baseChips(type) * stake
+                    val bm = baseMult(type)
                     val fx = Fx()
-                    perks.forEach { pk -> pk.effect?.invoke(pk, ctx, fx) }
+                    fun fire(i: Int, pk: Perk) {
+                        if (pk.id == "copy") {
+                            val t = perks.getOrNull(i + 1)
+                            if (t?.effect != null && t.id != "copy") { val tmp = Fx(); t.effect.invoke(t, ctx, tmp); fx.merge(tmp, "${pk.name}: ${t.name}") }
+                        } else pk.effect?.invoke(pk, ctx, fx)
+                    }
+                    perks.forEachIndexed { i, pk -> if (!pk.late) fire(i, pk) }
+                    perks.forEachIndexed { i, pk -> if (pk.late) fire(i, pk) }
+                    perks.forEach { pk ->
+                        when (pk.edition) {
+                            Edition.FOIL -> fx.hit(pk.title, "+40 chips", chips = 40)
+                            Edition.HOLO -> fx.hit(pk.title, "+6 mult", mult = 6.0)
+                            Edition.POLY -> fx.hit(pk.title, "x1.5 mult", x = 1.5)
+                            else -> {}
+                        }
+                    }
                     val combo = comboFor(winStreak)
-                    if (combo > 0) fx.notes += Trigger("Win streak", "+${combo.toInt()} mult (${winStreak} in a row)")
+                    if (combo > 0) fx.hit("Win streak", "+${combo.toInt()} mult (${winStreak} in a row)", mult = combo)
                     val chips = base + fx.chips
-                    val mult = (1.0 + fx.mult + combo) * fx.xmult
+                    val mult = (bm + fx.mult) * fx.xmult
                     val total2 = (chips * mult).roundToInt()
-                    score += total2; if (total2 > bestHand) bestHand = total2
+                    score += total2
+                    if (total2 > bestHand) { bestHand = total2; bestCards = h.cards; bestType = type; bestChips = chips; bestMult = mult }
                     money += fx.money
-                    out += ScoreEvent(++evKey, r.outcome, base, chips, mult, total2, fx.money, fx.notes.toList(), "")
+                    out += ScoreEvent(++evKey, r.outcome, base, chips, mult, total2, fx.money, fx.notes.toList(), "", type, level(type), bm)
                 }
             } else if (lost) {
-                val cost = stake + (activeBoss?.lossCost ?: 0)
+                val cost = (stake + (activeBoss?.lossCost ?: 0) + perks.count { it.id == "gambler" } - perks.count { it.id == "insure" }).coerceAtLeast(0)
                 val pay = minOf(cost, money); money -= pay
+                val consol = perks.count { it.id == "consol" } * 2
+                money += consol
                 if (!netUsed && perks.any { it.saveFirstLoss } && !refunded) { netUsed = true; refunded = true; handsLeft++ }
-                out += ScoreEvent(++evKey, r.outcome, 0, 0, 1.0, 0, -pay, if (refunded) listOf(Trigger("Safety Net", "The hand is not used up")) else emptyList(), "")
+                else if (!refunded && perks.any { it.id == "ghost" } && rnd.nextInt(4) == 0) { refunded = true; ghosted = true; handsLeft++ }
+                out += ScoreEvent(++evKey, r.outcome, 0, 0, 1.0, 0, -pay + consol, (if (refunded) listOf(Trigger(if (ghosted) "Ghost Hand" else "Safety Net", "The hand is not used up")) else emptyList()) + (if (consol > 0) listOf(Trigger("Consolation", "+\$$consol", money = consol)) else emptyList()), "")
             } else out += ScoreEvent(++evKey, r.outcome, 0, 0, 1.0, 0, 0, emptyList(), "")
         }
         lastScore = out
@@ -337,6 +519,8 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         if (interest > 0) lines += "Interest on \$$money" to interest
         val tick = perks.sumOf { it.clearMoney }
         if (tick > 0) lines += "Golden Ticket" to tick
+        perks.filter { it.id == "snow" }.forEach { it.grow++ }
+        repeat(perks.count { it.id == "trainer" }) { HandType.entries[rnd.nextInt(HandType.entries.size)].let { t -> levels[t.ordinal]++; lastTrained = t } }
         cashout = Cashout(lines)
         money += cashout!!.total
         blindsCleared++
@@ -363,23 +547,62 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
             val total = pool.sumOf { it.rarity.weight }
             var roll = rnd.nextInt(total)
             val pk = pool.first { roll -= it.rarity.weight; roll < 0 }
-            pool.remove(pk); picks += Offer(pk, null)
+            pool.remove(pk)
+            val e = rnd.nextInt(100).let { v -> when { v < 3 -> Edition.NEGATIVE; v < 8 -> Edition.POLY; v < 16 -> Edition.HOLO; v < 28 -> Edition.FOIL; else -> Edition.NONE } }
+            picks += Offer(pk.copyWith(edition = e), null)
         }
         picks += Offer(null, Tonic.entries[rnd.nextInt(Tonic.entries.size)])
+        val t = HandType.entries[rnd.nextInt(HandType.entries.size)]
+        picks += Offer(null, null, train = t, trainLevel = level(t))
+        picks += Offer(null, null, pack = true)
         offers = picks
     }
+
+    /** The perks in the pack that is open right now, or null. */
+    var pack: List<Perk>? = null; private set
+
+    private fun rollPack(): List<Perk> {
+        val owned = perks.map { it.id }.toSet()
+        val pool = Perks.ALL.filter { it.id !in owned }.toMutableList()
+        val out = mutableListOf<Perk>()
+        repeat(3) {
+            if (pool.isEmpty()) return@repeat
+            val total = pool.sumOf { it.rarity.weight + if (it.rarity != Rarity.COMMON) 12 else 0 }
+            var roll = rnd.nextInt(total)
+            val pk = pool.first { roll -= it.rarity.weight + if (it.rarity != Rarity.COMMON) 12 else 0; roll < 0 }
+            pool.remove(pk)
+            val e = rnd.nextInt(100).let { v -> when { v < 6 -> Edition.NEGATIVE; v < 16 -> Edition.POLY; v < 32 -> Edition.HOLO; v < 52 -> Edition.FOIL; else -> Edition.NONE } }
+            out += pk.copyWith(edition = e)
+        }
+        return out
+    }
+
+    fun canPick(j: Int): Boolean {
+        val p = pack?.getOrNull(j) ?: return false
+        return perks.size < slots || p.edition == Edition.NEGATIVE
+    }
+    fun pickFromPack(j: Int): Boolean {
+        if (!canPick(j)) return false
+        perks += pack!![j].copyWith(); pack = null
+        return true
+    }
+    fun skipPack() { pack = null }
 
     fun canBuy(i: Int): Boolean {
         val o = offers.getOrNull(i) ?: return false
         if (phase != RunPhase.SHOP || o.sold || money < o.cost) return false
-        return o.perk == null || perks.size < SLOTS
+        if (o.pack) return pack == null
+        if (pack != null) return false
+        return o.perk == null || perks.size < slots || o.perk.edition == Edition.NEGATIVE
     }
 
     fun buy(i: Int): Boolean {
         if (!canBuy(i)) return false
         val o = offers[i]
         money -= o.cost; o.sold = true
-        o.perk?.let { perks += it }
+        o.perk?.let { perks += it.copyWith() }
+        o.train?.let { levels[it.ordinal]++; lastTrained = it }
+        if (o.pack) pack = rollPack()
         when (o.tonic) { Tonic.HAND -> bonusHands++; Tonic.COUNT -> countNotes = true; null -> {} }
         return true
     }
@@ -391,24 +614,32 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
         return true
     }
 
+    /** Perk order matters (Copycat copies its right neighbour), so the player can rearrange between hands. */
+    fun movePerk(from: Int, to: Int): Boolean {
+        if (inRound || from !in perks.indices || to !in perks.indices || from == to) return false
+        val pk = perks.removeAt(from); perks.add(to, pk)
+        return true
+    }
+
     fun sell(i: Int): Boolean {
         if (phase != RunPhase.SHOP && phase != RunPhase.SELECT) return false
         val pk = perks.getOrNull(i) ?: return false
+        if (pk.edition == Edition.NEGATIVE && perks.size > slots - 1) return false
         money += pk.sell; perks.removeAt(i)
         return true
     }
 
     fun leaveShop(): Boolean {
         if (phase != RunPhase.SHOP) return false
-        offers = emptyList()
+        offers = emptyList(); pack = null
         nextBlind()
         return true
     }
 
     // Saving: a run is saved between blinds, so a blind in progress restarts when you come back.
     fun save(): String = listOf(
-        "1", deck.name, ante, blind, money, perks.joinToString(",") { it.id }, bonusHands, if (countNotes) 1 else 0,
-        blindsCleared, bestHand, skips, if (phase == RunPhase.SHOP) 1 else 0,
+        "2", deck.name, ante, blind, money, perks.joinToString(",") { "${it.id}@${it.edition.name}:${it.grow}" }, bonusHands, if (countNotes) 1 else 0,
+        blindsCleared, bestHand, skips, if (phase == RunPhase.SHOP) 1 else 0, levels.joinToString(","),
     ).joinToString("|")
 
     /** True while it is safe to save: not in the middle of a blind. */
@@ -423,6 +654,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default) {
 
     internal fun forceMoney(n: Int) { money = n }
     internal fun forceScore(n: Int) { score = n }
+    internal fun setLevels(l: List<Int>) { l.forEachIndexed { i, v -> if (i < levels.size) levels[i] = v } }
 
     fun lose(why: String) { phase = RunPhase.OVER; cause = why }
 }
@@ -432,12 +664,18 @@ object RunSave {
         if (text.isNullOrBlank()) return null
         return try {
             val p = text.split("|")
-            if (p[0] != "1") return null
+            if (p[0] != "1" && p[0] != "2") return null
             val deck = StartDeck.valueOf(p[1])
             val r = Run(deck, rnd)
             r.perks.clear()
-            p[5].split(",").filter { it.isNotEmpty() }.forEach { id -> Perks.get(id)?.let { r.perks += it } }
+            p[5].split(",").filter { it.isNotEmpty() }.forEach { tok ->
+                val id = tok.substringBefore("@").substringBefore(":")
+                val ed = tok.substringAfter("@", "").substringBefore(":").let { n -> Edition.entries.firstOrNull { it.name == n } ?: Edition.NONE }
+                val gr = tok.substringAfter(":", "0").toIntOrNull() ?: 0
+                Perks.fresh(id, ed, gr)?.let { r.perks += it }
+            }
             r.setState(p[2].toInt(), p[3].toInt(), p[4].toInt(), p[6].toInt(), p[7] == "1", p[8].toInt(), p[9].toInt(), p[10].toInt(), p[11] == "1")
+            if (p[0] == "2" && p.size > 12) r.setLevels(p[12].split(",").mapNotNull { it.toIntOrNull() })
             r
         } catch (e: Exception) { null }
     }

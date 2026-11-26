@@ -116,6 +116,22 @@ class CasualStore(context: Context?) {
     var runBestHand: Int
         get() = int("run_best_hand", 0)
         set(v) = put({ putInt("run_best_hand", v) }, "run_best_hand" to v)
+    /** Rogue Run sound effects. On by default. */
+    var runSound: Boolean
+        get() = int("run_sound", 1) == 1
+        set(v) = put({ putInt("run_sound", if (v) 1 else 0) }, "run_sound" to (if (v) 1 else 0))
+    /** Reduce motion for Rogue Run: on means full animation. */
+    var runMotion: Boolean
+        get() = int("run_motion", 1) == 1
+        set(v) = put({ putInt("run_motion", if (v) 1 else 0) }, "run_motion" to (if (v) 1 else 0))
+    /** Rogue Run effects quality: 0 low, 1 normal, 2 high. */
+    var runQuality: Int
+        get() = int("run_quality", 1).coerceIn(0, 2)
+        set(v) = put({ putInt("run_quality", v.coerceIn(0, 2)) }, "run_quality" to v.coerceIn(0, 2))
+    /** Finished runs, newest last: ante,cleared,bestHand,won,deckIndex separated by semicolons. */
+    var runHistory: String
+        get() = str("run_hist") ?: ""
+        set(v) = put({ putString("run_hist", v) }, "run_hist" to v)
     var nightRun: String?
         get() = str("night_run")
         set(v) = put({ putString("night_run", v) }, "night_run" to (v ?: ""))

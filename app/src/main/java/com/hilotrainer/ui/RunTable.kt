@@ -339,10 +339,7 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
                     Text("\$${(if (r.inRound) r.stake else vm.stakePick) * Run.UNIT}", fontSize = 10.sp, color = Cream.copy(alpha = 0.8f))
                 }
             }
-            if (r.countVisible) Text(
-                "RUN ${gs.runningCount}  TRUE ${"%.1f".format(gs.trueCountExact)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Gold,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(50)).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 3.dp),
-            )
+            if (r.countVisible) CountMeter(gs.runningCount, gs.trueCountExact, Modifier.align(Alignment.BottomEnd).padding(6.dp))
             Flash(key, if (won) Color(0xAAE9C46A) else Color(0x88B71C1C))
             ScorePop(key, evs.sumOf { it.total }, Modifier.align(Alignment.TopCenter).offset(0.dp, pTop))
         }

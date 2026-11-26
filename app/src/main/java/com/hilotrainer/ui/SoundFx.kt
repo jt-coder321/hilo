@@ -8,7 +8,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import com.hilotrainer.R
 
-enum class Fx { DEAL, FLIP, SHUFFLE, CHIP, WIN, BLACKJACK, LOSE, MISTAKE, CORRECT, CHATTER, BUZZ }
+enum class Fx { DEAL, FLIP, SHUFFLE, CHIP, WIN, BLACKJACK, LOSE, MISTAKE, CORRECT, CHATTER, BUZZ, RG_TICK, RG_CHIME, RG_SLAM, RG_COIN, RG_FANFARE, RG_BUST, RG_BUY }
 
 /** Plays the synthesized table sounds and matching vibration. */
 class SoundFx(context: Context) {
@@ -35,6 +35,13 @@ class SoundFx(context: Context) {
         Fx.CHATTER -> null
         // A phone buzzing in your pocket.
         Fx.BUZZ -> longArrayOf(0, 180, 90, 180) to intArrayOf(0, 255, 0, 255)
+        Fx.RG_TICK -> longArrayOf(0, 8) to intArrayOf(0, 60)
+        Fx.RG_CHIME -> longArrayOf(0, 14, 20, 10) to intArrayOf(0, 110, 0, 70)
+        Fx.RG_SLAM -> longArrayOf(0, 30, 20, 70) to intArrayOf(0, 255, 0, 160)
+        Fx.RG_COIN -> longArrayOf(0, 12, 30, 12) to intArrayOf(0, 120, 0, 100)
+        Fx.RG_FANFARE -> longArrayOf(0, 25, 40, 25, 40, 25, 40, 120) to intArrayOf(0, 90, 0, 130, 0, 170, 0, 255)
+        Fx.RG_BUST -> longArrayOf(0, 120) to intArrayOf(0, 90)
+        Fx.RG_BUY -> longArrayOf(0, 20, 30, 30) to intArrayOf(0, 120, 0, 180)
     }
 
     private val pool = SoundPool.Builder()
@@ -58,15 +65,22 @@ class SoundFx(context: Context) {
         Fx.MISTAKE to R.raw.mistake,
         Fx.CORRECT to R.raw.correct,
         Fx.CHATTER to R.raw.chatter,
+        Fx.RG_TICK to R.raw.rg_tick,
+        Fx.RG_CHIME to R.raw.rg_chime,
+        Fx.RG_SLAM to R.raw.rg_slam,
+        Fx.RG_COIN to R.raw.rg_coin,
+        Fx.RG_FANFARE to R.raw.rg_fanfare,
+        Fx.RG_BUST to R.raw.rg_bust,
+        Fx.RG_BUY to R.raw.rg_buy,
     ).mapValues { (_, res) -> pool.load(context, res, 1) }
 
     var soundOn = true
     var hapticsOn = true
     var view: View? = null
 
-    fun play(fx: Fx) {
+    fun play(fx: Fx, pitch: Float = 1f) {
         if (soundOn) {
-            val rate = when (fx) {
+            val rate = pitch * when (fx) {
                 Fx.DEAL -> 0.94f + Math.random().toFloat() * 0.12f
                 // Chips and voices vary so table noise never sounds the same twice.
                 Fx.CHIP, Fx.CHATTER -> 0.8f + Math.random().toFloat() * 0.45f
@@ -85,10 +99,10 @@ class SoundFx(context: Context) {
             }
             val v = view ?: return
             val c = when (fx) {
-                Fx.DEAL, Fx.FLIP, Fx.CHIP -> HapticFeedbackConstants.CLOCK_TICK
+                Fx.DEAL, Fx.FLIP, Fx.CHIP, Fx.RG_TICK, Fx.RG_CHIME, Fx.RG_COIN, Fx.RG_BUY -> HapticFeedbackConstants.CLOCK_TICK
                 Fx.MISTAKE -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
                 Fx.BUZZ -> HapticFeedbackConstants.LONG_PRESS
-                Fx.WIN, Fx.BLACKJACK, Fx.CORRECT -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
+                Fx.WIN, Fx.BLACKJACK, Fx.CORRECT, Fx.RG_FANFARE, Fx.RG_SLAM -> if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.VIRTUAL_KEY
                 else -> return
             }
             v.performHapticFeedback(c)

@@ -63,7 +63,8 @@ class RunTest {
             assertTrue(r.collect())
             assertEquals(RunPhase.SHOP, r.phase)
             assertEquals(before, r.money)
-            assertEquals(4, r.offers.size)
+            assertEquals(6, r.offers.size)
+            assertEquals(1, r.offers.count { it.train != null })
             assertEquals(3, r.offers.count { it.perk != null })
             assertEquals(3, r.offers.mapNotNull { it.perk }.map { it.id }.toSet().size)
         }
@@ -155,5 +156,138 @@ class RunTest {
         val sim = RunSimTest()
         val deep = (1..60).count { sim.playRun(it).ante >= 3 || sim.playRun(it).phase == RunPhase.WON }
         assertTrue("only $deep of 60", deep >= 10)
+    }
+
+    // Hand types, editions and the new perks
+
+    @Test fun handTypesPickTheRarestKind() {
+        fun t(o: Outcome, cards: List<Card>, total: Int, doubled: Boolean = false, split: Boolean = false, bust: Boolean = false) =
+            HandType.of(HandCtx(o, cards, total, false, doubled, split, bust, 2, 1, 0, 0.0))
+        val c2 = listOf(card(Rank.TEN), card(Rank.NINE))
+        assertEquals(HandType.WIN, t(Outcome.WIN, c2, 19))
+        assertEquals(HandType.BUST, t(Outcome.WIN, c2, 19, bust = true))
+        assertEquals(HandType.TWENTY_ONE, t(Outcome.WIN, listOf(card(Rank.TEN), card(Rank.FIVE), card(Rank.SIX)), 21, bust = true))
+        assertEquals(HandType.SPLIT, t(Outcome.WIN, c2, 19, split = true, bust = true))
+        assertEquals(HandType.DOUBLE, t(Outcome.WIN, c2, 19, doubled = true, split = true))
+        assertEquals(HandType.CHARLIE, t(Outcome.WIN, List(5) { card(Rank.TWO) }, 10, doubled = true))
+        assertEquals(HandType.BLACKJACK, t(Outcome.BLACKJACK, listOf(card(Rank.ACE), card(Rank.KING)), 21))
+    }
+
+    @Test fun trainingRaisesBaseChipsAndMult() {
+        val r = Run(StartDeck.STANDARD, Random(3))
+        assertEquals(50, r.baseChips(HandType.WIN)); assertEquals(1.0, r.baseMult(HandType.WIN), 0.0)
+        r.setLevels(listOf(2))
+        assertEquals(90, r.baseChips(HandType.WIN)); assertEquals(3.0, r.baseMult(HandType.WIN), 0.0)
+        r.perks += Perks.fresh("scholar")!!
+        assertEquals(130, r.baseChips(HandType.WIN)); assertEquals(5.0, r.baseMult(HandType.WIN), 0.0)
+    }
+
+    @Test fun savesKeepLevelsEditionsAndGrowthAndOldSavesStillLoad() {
+        val r = Run(StartDeck.STANDARD, Random(4))
+        r.perks += Perks.fresh("snow", Edition.POLY, 3)!!
+        r.perks += Perks.fresh("wild", Edition.NEGATIVE)!!
+        r.setLevels(listOf(0, 2, 0, 1))
+        val back = RunSave.restore(r.save(), Random(1))!!
+        assertEquals(listOf("snow", "wild"), back.perks.map { it.id })
+        assertEquals(listOf(Edition.POLY, Edition.NEGATIVE), back.perks.map { it.edition })
+        assertEquals(3, back.perks[0].grow)
+        assertEquals(2, back.level(HandType.BUST)); assertEquals(1, back.level(HandType.SPLIT))
+        assertEquals(6, back.slots)
+        val old = RunSave.restore("1|STANDARD|2|1|9|ace,wild|0|0|3|120|0|0", Random(2))!!
+        assertEquals(listOf("ace", "wild"), old.perks.map { it.id })
+        assertEquals(9, old.money)
+    }
+
+    @Test fun editionsAddToThePerkAndSellFor() {
+        val f = Perks.fresh("penny", Edition.FOIL)!!
+        assertEquals(Perks.get("penny")!!.cost + 2, f.cost)
+        assertEquals("Foil Penny Saver", f.title)
+        assertEquals(Perks.get("penny")!!.cost, f.copyWith(Edition.NONE).cost)
+    }
+
+    @Test fun newPerksDoWhatTheySay() {
+        val ten = card(Rank.TEN)
+        fun ctx(won: Boolean = true, streak: Int = 1, money: Int = 0, perks: Int = 1, dBust: Boolean = false, stake: Int = 2, bj: Boolean = false) =
+            HandCtx(if (bj) Outcome.BLACKJACK else if (won) Outcome.WIN else Outcome.LOSE, listOf(ten, ten), 20, false, false, false, dBust, stake, streak, 0, 0.0, money, perks)
+        fun run(id: String, c: HandCtx, p: Perk = Perks.fresh(id)!!): Fx = Fx().also { p.effect!!.invoke(p, c, it) }
+        assertEquals(4.0, run("bustbuster", ctx(dBust = true)).mult, 0.0)
+        assertEquals(0.0, run("bustbuster", ctx()).mult, 0.0)
+        assertEquals(36, run("collector", ctx(perks = 3)).chips)
+        assertEquals(120, run("natural", ctx(bj = true)).chips)
+        assertEquals(3.0, run("hot", ctx(streak = 3)).mult, 0.0)
+        assertEquals(8.0, run("heavy", ctx(stake = 1)).mult, 0.0)
+        assertEquals(0.0, run("heavy", ctx(stake = 2)).mult, 0.0)
+        assertEquals(4.0, run("fat", ctx(money = 47)).mult, 0.0)
+        val snow = Perks.fresh("snow", grow = 3)!!
+        assertEquals(5.0, run("snow", ctx(), snow).mult, 0.0)
+    }
+
+    @Test fun chainReactionCountsOtherPerksThatFired() {
+        val ten = card(Rank.TEN)
+        val c = HandCtx(Outcome.WIN, listOf(ten, ten), 20, false, false, false, true, 2, 1, 0, 0.0, 0, 3)
+        val f = Fx()
+        f.hit("A", "x", mult = 1.0); f.hit("B", "x", mult = 1.0); f.hit("A", "again", mult = 1.0)
+        val ch = Perks.fresh("chain")!!
+        ch.effect!!.invoke(ch, c, f)
+        assertEquals(3.0 + 6.0, f.mult, 0.0)
+        assertTrue(ch.late)
+    }
+
+    @Test fun skippingTrainsARandomHandKind() {
+        val r = Run(StartDeck.STANDARD, Random(6))
+        r.skipBlind()
+        assertEquals(1, HandType.entries.sumOf { r.level(it) })
+        assertEquals(r.level(r.lastTrained!!), 1)
+    }
+
+    @Test fun shopAlwaysOffersATrainingCardAndEditionsAreRare() {
+        var editions = 0; var total = 0
+        for (seed in 1..60) {
+            val r = Run(StartDeck.STANDARD, Random(seed))
+            r.setState(1, 0, 50, 0, false, 0, 0, 0, true)
+            assertEquals(1, r.offers.count { it.train != null })
+            r.offers.mapNotNull { it.perk }.forEach { total++; if (it.edition != Edition.NONE) editions++ }
+        }
+        assertTrue("editions $editions of $total", editions in total / 8..total / 2)
+    }
+
+    @Test fun packsOfferThreeAndOnePickOrSkipWorks() {
+        val r = Run(StartDeck.STANDARD, Random(21))
+        r.setState(1, 0, 50, 0, false, 0, 0, 0, true)
+        val i = r.offers.indexOfFirst { it.pack }
+        assertTrue(i >= 0)
+        assertTrue(r.buy(i))
+        val pack = r.pack!!
+        assertEquals(3, pack.map { it.id }.toSet().size)
+        val before = r.perks.size
+        assertTrue(r.pickFromPack(0))
+        assertEquals(before + 1, r.perks.size)
+        assertEquals(null, r.pack)
+        val j = r.offers.indexOfFirst { it.pack }
+        assertFalse(r.canBuy(j))
+    }
+
+    @Test fun skippingAPackKeepsPerksAndMovePerkReorders() {
+        val r = Run(StartDeck.STANDARD, Random(22))
+        r.setState(1, 0, 80, 0, false, 0, 0, 0, true)
+        r.buy(r.offers.indexOfFirst { it.pack })
+        r.skipPack()
+        assertEquals(null, r.pack)
+        r.offers.withIndex().filter { it.value.perk != null }.take(2).forEach { r.buy(it.index) }
+        if (r.perks.size >= 2) {
+            val a = r.perks[0].id; val b = r.perks[1].id
+            assertTrue(r.movePerk(0, 1))
+            assertEquals(b, r.perks[0].id); assertEquals(a, r.perks[1].id)
+        }
+    }
+
+    @Test fun twentyFourNewPerksExistAndSaveRoundTrips() {
+        assertTrue(Perks.ALL.size >= 40)
+        val r = Run(StartDeck.STANDARD, Random(23))
+        r.setState(1, 0, 80, 0, false, 0, 0, 0, true)
+        r.offers.withIndex().filter { it.value.perk != null }.take(2).forEach { r.buy(it.index) }
+        val back = RunSave.restore(r.save(), Random(1))!!
+        assertEquals(r.perks.map { it.id }, back.perks.map { it.id })
+        assertEquals(r.money, back.money)
     }
 }

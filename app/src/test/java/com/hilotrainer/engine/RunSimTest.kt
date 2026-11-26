@@ -26,7 +26,7 @@ class RunSimTest {
                     var bought = true
                     while (bought) {
                         bought = false
-                        val best = r.offers.indices.filter { r.canBuy(it) && r.offers[it].perk != null }.maxByOrNull { r.offers[it].cost }
+                        val best = r.offers.indices.filter { r.canBuy(it) && (r.offers[it].perk != null || r.offers[it].train != null) }.maxByOrNull { r.offers[it].cost * (if (r.offers[it].perk != null) 2 else 1) }
                         if (best != null) { r.buy(best); bought = true }
                     }
                     r.leaveShop()

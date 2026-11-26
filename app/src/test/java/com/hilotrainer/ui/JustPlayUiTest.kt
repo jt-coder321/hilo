@@ -614,6 +614,22 @@ abstract class JustPlayShotBase {
         v.mut { buy(offers.indexOfFirst { it.perk != null }) }
         shoot("run-shop") { RunScreen(v.store, {}, v) }
     }
+    @Test fun runPackAndHistory() {
+        val v = runVm(11, com.hilotrainer.engine.StartDeck.STANDARD)
+        var tries = 0
+        while (v.run!!.phase != com.hilotrainer.engine.RunPhase.CLEARED && tries++ < 20) { v.playOutBlind(); if (v.run!!.phase == com.hilotrainer.engine.RunPhase.OVER) v.start(com.hilotrainer.engine.StartDeck.STANDARD) }
+        v.mut { collect() }
+        v.mut { forceMoney(30) }
+        v.mut { buy(offers.indexOfFirst { it.pack }) }
+        assertTrue(v.run!!.pack != null)
+        shoot("run-pack") { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runHistory() {
+        val v = runVm(12)
+        v.store.runHistory = "3,7,1240,0,0;6,18,98200,1,1;2,4,310,0,0;4,10,5200,0,2"
+        v.leaveRun(); v.historyOpen = true
+        shoot("run-history") { RunScreen(v.store, {}, v) }
+    }
     @Test fun runEnd() {
         val v = runVm(7)
         v.mut { lose("Fell 140 short of 250 on the Big Blind of Ante 2.") }

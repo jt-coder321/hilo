@@ -153,7 +153,11 @@ class MainActivity : ComponentActivity() {
                             com.hilotrainer.ui.HubScreen(com.hilotrainer.ui.Hubs.of(screen)!!, prefs, home) { next -> open(next) }
                         Screen.PLAY -> PlayScreen(playVm, home)
                         Screen.JUST_PLAY -> com.hilotrainer.ui.JustPlayScreen(casualVm, home)
-                        Screen.ROGUE_RUN -> com.hilotrainer.ui.RunScreen(casualVm.store, home)
+                        Screen.ROGUE_RUN -> com.hilotrainer.ui.RunScreen(casualVm.store, home, fx = { e, pitch ->
+                            fx.soundOn = casualVm.store.runSound
+                            fx.hapticsOn = casualVm.settings.haptics
+                            fx.play(e, pitch)
+                        })
                         Screen.COUNT_DRILL -> CountDrillScreen(prefs, home, playVm.fx)
                         Screen.TRUE_DRILL -> TrueCountDrillScreen(prefs, home, playVm.fx)
                         Screen.STRATEGY_DRILL -> StrategyDrillScreen(prefs, home, playVm.fx)
