@@ -12,8 +12,8 @@ android {
         applicationId = "com.hilotrainer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "9.5.1"
+        versionCode = 22
+        versionName = "9.5.2"
     }
 
     signingConfigs {

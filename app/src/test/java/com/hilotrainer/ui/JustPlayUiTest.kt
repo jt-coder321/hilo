@@ -477,6 +477,22 @@ abstract class JustPlayShotBase {
         shoot("jp-nights") { CasualMenu(v, 6, {}) {} }
     }
 
+    @Test fun sideBetPanelShowsEachBetOnItsOwnLine() {
+        val v = table(47, CasualSettings(chatStyle = 1))
+        v.addChip(25)
+        v.cyclePP(); v.cycleTP(); v.cycleLL(); v.cycleNC()
+        v.deal()
+        if (v.gs.phase == Phase.INSURANCE) v.insurance(false)
+        while (v.gs.phase == Phase.PLAYER) v.act(Action.STAND)
+        val lines = v.sideLines
+        assertEquals(listOf("Perfect Pairs", "21+3", "Lucky Ladies", "Next Card"), lines.map { it.name })
+        lines.forEach { assertTrue(it.result.isNotBlank()) }
+        // The line nets add up to the side bet part of the round.
+        val sideNet = lines.sumOf { it.net }
+        assertEquals(v.banner!!.amount, v.gs.results.sumOf { it.net } + v.gs.insuranceNet + sideNet)
+        shoot("jp-sidebets-panel") { JustPlayScreen(v) {} }
+    }
+
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
 
     @Test fun longSessionWithNewTalkStaysHonest() {

@@ -68,6 +68,9 @@ data class Departing(val seat: Int, val s: Seat, val key: Long)
 /** Chips moving between a seat's bet spot and the dealer's rack after a hand. */
 data class Payout(val key: Long, val seat: Int, val amount: Int, val toDealer: Boolean)
 
+/** One side bet's result after a hand, for the panel. [net] is the win or loss on that bet. */
+data class SideLine(val name: String, val result: String, val net: Int)
+
 data class CasualBanner(val title: String, val amount: Int, val big: Boolean, val key: Long)
 
 data class PitState(val seat: Int, val key: Long)
@@ -480,6 +483,19 @@ class CasualViewModel(val store: CasualStore, private val rnd: Random = Random.D
     fun cycleLL() { if (canBet) { llBet = nextSide(llBet); fx(Fx.CHIP) } }
     fun cycleNC() { if (canBet) { ncBet = nextSide(ncBet); fx(Fx.CHIP) } }
     fun callNC(i: Int) { if (canBet) { ncCall = i.coerceIn(0, 2); fx(Fx.CHIP) } }
+    /** What each side bet did this round, one line per bet. Empty until the round is over. */
+    var sidePanelKey by mutableStateOf(-1L)
+    val sidePanelOn: Boolean get() = sideLines.isNotEmpty() && sidePanelKey != gs.roundStartSeq.toLong()
+    fun hideSidePanel() { sidePanelKey = gs.roundStartSeq.toLong() }
+    val sideLines: List<SideLine> get() {
+        if (!roundOver || busy || !dealtOnce) return emptyList()
+        val out = mutableListOf<SideLine>()
+        if (gs.perfectPairsBet > 0) out += SideLine("Perfect Pairs", gs.perfectPairsResult ?: "No pair", gs.perfectPairsNet ?: -gs.perfectPairsBet)
+        tpResult?.let { out += SideLine("21+3", it, tpNet) }
+        llResult?.let { out += SideLine("Lucky Ladies", it, llNet) }
+        ncResult?.let { out += SideLine("Next Card", it, ncNet) }
+        return out
+    }
     val miniTotal: Int get() = ppBet + tpBet + llBet + ncBet
 
     private fun grantPower(reason: String) {
