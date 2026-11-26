@@ -95,6 +95,11 @@ class CasualStore(context: Context?) {
     var storyDone: Int
         get() = int("story_done", 0)
         set(v) = put({ putInt("story_done", v) }, "story_done" to v)
+    /** The Just Play menu opens on the tab you used last. */
+    var menuTab: Int
+        get() = int("menu_tab", 0).coerceIn(0, 3)
+        set(v) = put({ putInt("menu_tab", v) }, "menu_tab" to v)
+
     /** Roguelike run: the saved run, and the record across runs. Casual only. */
     var runSave: String?
         get() = str("run_save")

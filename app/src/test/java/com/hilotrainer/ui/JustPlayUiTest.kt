@@ -474,7 +474,7 @@ abstract class JustPlayShotBase {
         repeat(4) { playOne(v) }
         v.setStoryForTest(2)
         v.startNight(2)
-        shoot("jp-nights") { CasualMenu(v, 6, {}) {} }
+        shoot("jp-nights") { CasualMenu(v, 0, {}, part = 1) {} }
     }
 
     @Test fun sideBetPanelShowsEachBetOnItsOwnLine() {
@@ -618,9 +618,23 @@ abstract class JustPlayShotBase {
     }
     @Test fun runMenuEntryOpensTheRun() {
         val v = casualVm(9)
-        assertTrue(CasualTabs.contains("Run"))
+        assertTrue(CasualTabs == listOf("Games", "Table", "Settings", "Me"))
         v.runOpen = true
         shoot("run-from-table") { JustPlayScreen(v) {} }
+    }
+
+    @Test fun menuRemembersTheLastTabAndSettingsAreSearchable() {
+        val store = CasualStore(null)
+        assertEquals(0, store.menuTab)
+        store.menuTab = 2; assertEquals(2, store.menuTab)
+        store.menuTab = 9; assertEquals(3, store.menuTab)
+        assertEquals(listOf("Decks", "Cut card depth"), SettingsIndex.find("deck").map { it.first }.take(1) + SettingsIndex.find("cut").map { it.first })
+        assertTrue(SettingsIndex.find("count").any { it.second == SettingsPage.COACHING })
+        assertTrue(SettingsIndex.find("sound").any { it.second == SettingsPage.CONTROLS })
+        assertTrue(SettingsIndex.find("zzzz").isEmpty())
+        assertTrue(Hubs.MODES.groups.flatMap { it.second }.none { it.screen == Screen.JUST_PLAY })
+        assertEquals("Drills", Hubs.TRAIN.title)
+        assertEquals("Challenges", Hubs.MODES.title)
     }
 
     @Test fun captionsAreTheDefault() { assertEquals(2, CasualSettings().chatStyle) }
@@ -678,11 +692,11 @@ abstract class JustPlayShotBase {
         shoot("jp-red") { JustPlayScreen(v) {} }
     }
 
-    @Test fun menuRegulars() { val v = table(); shoot("jp-regulars") { CasualMenu(v, 5, {}) {} } }
-    @Test fun menuTable() { val v = table(); shoot("jp-rules") { CasualMenu(v, 0, {}) {} } }
+    @Test fun menuRegulars() { val v = table(); shoot("jp-regulars") { CasualMenu(v, 3, {}, part = 2) {} } }
+    @Test fun menuTable() { val v = table(); shoot("jp-rules") { CasualMenu(v, 1, {}) {} } }
     @Test fun menuStats() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-stats") { CasualMenu(v, 3, {}) {} } }
-    @Test fun menuAwards() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-awards") { CasualMenu(v, 4, {}) {} } }
-    @Test fun menuLook() { val v = table(); shoot("jp-look") { CasualMenu(v, 1, {}) {} } }
+    @Test fun menuAwards() { val v = table(); repeat(40) { playOne(v) }; shoot("jp-awards") { CasualMenu(v, 3, {}, part = 1) {} } }
+    @Test fun menuLook() { val v = table(); shoot("jp-options") { CasualMenu(v, 2, {}) {} } }
     @Test fun dare() { val v = table(); v.rushForTest(2); v.drinkForTest(3); v.giveWheelForTest(); v.giveDareForTest(1, 30); v.sayForTest(1, "Bet you can't beat the dealer this hand. $30 says you can't."); v.sayForTest(CasualViewModel.DEALER, "Bets down, please."); shoot("jp-dare") { JustPlayScreen(v) {} } }
     @Test fun wheel() { val v = table(); v.giveWheelForTest(); shoot("jp-wheel") { WheelDialog(v) {} } }
     @Test fun lucky() { val v = table(); v.claimBonus(1000); v.pickLucky(1); shoot("jp-lucky") { LuckyDialog(v) } }

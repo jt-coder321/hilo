@@ -122,7 +122,7 @@ class V7UiTest {
 
     @Test fun everyScreenIsReachableFromHome() {
         val inHubs = Hubs.ALL.flatMap { h -> h.groups.flatMap { it.second.map { i -> i.screen } } }.toSet()
-        val direct = setOf(Screen.HOME, Screen.PLAY, Screen.SETTINGS, Screen.COURSE, Screen.QUICK_DRILL) + Hubs.ALL.map { it.screen }
+        val direct = setOf(Screen.HOME, Screen.PLAY, Screen.JUST_PLAY, Screen.SETTINGS, Screen.COURSE, Screen.QUICK_DRILL) + Hubs.ALL.map { it.screen }
         // Weak spots are also opened from the heat map.
         val missing = Screen.entries.filter { it !in inHubs && it !in direct }
         assertEquals(emptyList<Screen>(), missing)

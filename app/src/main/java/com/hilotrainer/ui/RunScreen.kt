@@ -146,7 +146,7 @@ private fun RunTop(vm: RunVm, r: Run?, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Color(0xFF2A1A10)).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Gold) }
         Column(Modifier.weight(1f)) {
-            Text("THE RUN", fontSize = 11.sp, letterSpacing = 2.sp, color = Gold)
+            Text("ROGUE RUN", fontSize = 11.sp, letterSpacing = 2.sp, color = Gold)
             if (r != null && r.phase != RunPhase.OVER && r.phase != RunPhase.WON) Text("Ante ${r.ante} of ${Run.MAX_ANTE}  ·  ${if (r.phase == RunPhase.SHOP) "Shop" else r.blindName}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (r.isBoss) BossRed else Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else Text("Roguelike mode, casual only", fontSize = 13.sp, color = Cream.copy(alpha = 0.7f))
         }
@@ -164,7 +164,7 @@ private fun StartPane(vm: RunVm) {
             "Every blind sets a chip target. Win hands to score chips times mult, before you run out of hands. Cash from each blind buys perks that bend the numbers. Clear ${Run.MAX_ANTE} antes of three blinds to win the run.",
             fontSize = 14.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 560.dp),
         )
-        if (vm.hasSave) GoldButton("Continue your run", Modifier.widthIn(max = 420.dp).fillMaxWidth()) { vm.resume() }
+        if (vm.hasSave) GoldButton("Continue your Rogue Run", Modifier.widthIn(max = 420.dp).fillMaxWidth()) { vm.resume() }
         Text(if (vm.hasSave) "Or start a new one (this replaces the saved run)" else "Pick a starting deck", fontSize = 13.sp, color = Gold)
         StartDeck.entries.forEach { d ->
             val ok = vm.unlocked(d)
@@ -450,7 +450,7 @@ private fun CashoutPane(vm: RunVm, r: Run) {
             Row { Text("Total", fontSize = 16.sp, fontWeight = FontWeight.Black, color = Gold, modifier = Modifier.weight(1f)); Text("+\$${co.total}", fontSize = 18.sp, fontWeight = FontWeight.Black, color = GoodGreen) }
         }
         Text("You now have \$${r.money}", fontSize = 14.sp, color = Cream.copy(alpha = 0.8f))
-        GoldButton(if (r.isBoss && r.ante >= Run.MAX_ANTE) "Finish the run" else "To the shop", Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.mut { collect() } }
+        GoldButton(if (r.isBoss && r.ante >= Run.MAX_ANTE) "Finish the Rogue Run" else "To the shop", Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.mut { collect() } }
     }
 }
 
@@ -525,7 +525,7 @@ private fun EndPane(vm: RunVm, r: Run, onExit: () -> Unit) {
         }
         Text("Your perks", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold)
         Text(if (r.perks.isEmpty()) "None" else r.perks.joinToString(", ") { it.name }, fontSize = 13.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center)
-        GoldButton("New run", Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.leaveRun() }
+        GoldButton("New Rogue Run", Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.leaveRun() }
         GoldButton("Back to the table", Modifier.widthIn(max = 460.dp).fillMaxWidth(), primary = false) { onExit() }
     }
 }

@@ -60,7 +60,7 @@ data class Hub(val screen: Screen, val title: String, val blurb: String, val sui
 
 object Hubs {
     val TRAIN = Hub(
-        Screen.HUB_TRAIN, "Train", "Counting and strategy drills", Suit.SPADES,
+        Screen.HUB_TRAIN, "Drills", "Counting and strategy drills", Suit.SPADES,
         listOf(
             "Keep the count" to listOf(
                 HubItem(Screen.COUNT_DRILL, "Count drill", "Cards flash by, you keep the count", Suit.SPADES),
@@ -101,15 +101,14 @@ object Hubs {
         ),
     )
     val MODES = Hub(
-        Screen.HUB_MODES, "Play modes", "Career, daily, sessions", Suit.DIAMONDS,
+        Screen.HUB_MODES, "Challenges", "Career, daily, sessions, team play", Suit.DIAMONDS,
         listOf(
-            "At the table" to listOf(
-                HubItem(Screen.JUST_PLAY, "Just Play", "Blackjack for fun, no counting", Suit.HEARTS),
+            "Play modes" to listOf(
                 HubItem(Screen.CAREER, "Career mode", "Start small, prove yourself, move up", Suit.SPADES),
                 HubItem(Screen.SESSION, "One-hour session", "Breaks, fatigue and bankroll swings", Suit.CLUBS),
                 HubItem(Screen.MID_SHOE, "Join mid-shoe", "Sit down with the count unknown", Suit.DIAMONDS),
             ),
-            "Challenges" to listOf(
+            "Daily" to listOf(
                 HubItem(Screen.DAILY, "Daily challenge", "Today's shoe, the same for everyone", Suit.HEARTS),
             ),
             "Advanced" to listOf(
@@ -177,7 +176,7 @@ fun HomeScreen(prefs: Prefs? = null, go: (Screen) -> Unit) {
                 ) { go(Screen.COURSE) }
                 QuickTile("Quick drill", "60 seconds", Suit.DIAMONDS, Modifier.weight(1f)) { go(Screen.QUICK_DRILL) }
             }
-            Text("MORE", fontSize = 12.sp, letterSpacing = 2.sp, color = Gold, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+            Text("PRACTICE AND PROGRESS", fontSize = 12.sp, letterSpacing = 2.sp, color = Gold, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
             Hubs.ALL.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { h ->

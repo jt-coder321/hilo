@@ -140,7 +140,7 @@ fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
     val s = vm.settings
     CompositionLocalProvider(LocalCardStyle provides CardStyle(back = s.cardBack)) {
         Column(Modifier.fillMaxSize().background(Ink)) {
-            TopBar(vm, onBack) { menu = it }
+            TopBar(vm, onBack) { menu = vm.store.menuTab }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().themedFelt(s.theme)) {
                 TableArea(vm, maxWidth, maxHeight) { wheelOpen = true }
             }
@@ -148,7 +148,7 @@ fun JustPlayScreen(vm: CasualViewModel, onBack: () -> Unit) {
             PowerRow(vm)
             Controls(vm)
         }
-        if (menu != null) CasualMenu(vm, menu!!, onTab = { menu = it }) { menu = null }
+        if (menu != null) CasualMenu(vm, menu!!, onTab = { menu = it; vm.store.menuTab = it }) { menu = null }
         if (wheelOpen && (vm.wheelReady || vm.wheelIdx != null)) WheelDialog(vm) { wheelOpen = false }
         LuckyDialog(vm)
         MiniGamesDialog(vm)

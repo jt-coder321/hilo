@@ -123,7 +123,23 @@ private fun SettingsMenu(s: AppSettings, prefs: Prefs, onBack: () -> Unit, onOpe
                 Modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SettingsPage.entries.forEach { p ->
+                var query by remember { mutableStateOf("") }
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Cream, fontSize = 16.sp),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Gold),
+                    decorationBox = { inner ->
+                        Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(Ink.copy(alpha = 0.55f)).border(1.dp, Gold.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
+                            if (query.isEmpty()) Text("Find a setting, like count, speed, sound", color = Cream.copy(alpha = 0.5f), fontSize = 15.sp)
+                            inner()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val hits = if (query.isBlank()) emptyList() else SettingsIndex.find(query)
+                if (query.isNotBlank() && hits.isEmpty()) Text("Nothing matches. Try another word.", fontSize = 13.sp, color = Cream.copy(alpha = 0.6f))
+                if (hits.isNotEmpty()) hits.forEach { (label, page) -> MenuRow(label, "In ${page.title}", page.suit) { onOpen(page) } }
+                else SettingsPage.entries.forEach { p ->
                     MenuRow(p.title, settingsSummary(p, s), p.suit) { onOpen(p) }
                 }
                 Spacer(Modifier.height(6.dp))
@@ -371,5 +387,46 @@ fun UpdatePanel() {
             }
         }
         status?.let { Spacer(Modifier.height(6.dp)); Text(it, fontSize = 14.sp, color = Cream) }
+    }
+}
+
+/** What lives where, so the settings menu can find a setting by a word you remember. */
+object SettingsIndex {
+    private val ITEMS: List<Triple<String, String, SettingsPage>> = listOf(
+        Triple("Decks", "shoe number of decks", SettingsPage.RULES),
+        Triple("Cut card depth", "penetration shoe", SettingsPage.RULES),
+        Triple("Shuffle", "machine continuous by hand", SettingsPage.RULES),
+        Triple("Dealer hits soft 17", "h17 s17 dealer payouts", SettingsPage.RULES),
+        Triple("Blackjack pays 6 to 5", "payout 3 to 2", SettingsPage.RULES),
+        Triple("Surrender", "give up", SettingsPage.RULES),
+        Triple("Double after splitting", "das", SettingsPage.RULES),
+        Triple("Perfect Pairs side bet", "side bets", SettingsPage.RULES),
+        Triple("Other players", "seats bots", SettingsPage.TABLE),
+        Triple("Dealing speed", "speed slow fast ladder", SettingsPage.TABLE),
+        Triple("Time to decide", "shot clock timer", SettingsPage.TABLE),
+        Triple("Casino realism", "distractions busy", SettingsPage.TABLE),
+        Triple("Card backs", "look cards design", SettingsPage.TABLE),
+        Triple("Hand signals", "hit stand buttons", SettingsPage.TABLE),
+        Triple("Dealer talks", "voice chat", SettingsPage.TABLE),
+        Triple("How much help", "hint coaching show right play", SettingsPage.COACHING),
+        Triple("Count checks", "ask me the count quiz", SettingsPage.COACHING),
+        Triple("Show the count all the time", "running count", SettingsPage.COACHING),
+        Triple("Counting system", "hi-lo ko zen", SettingsPage.COACHING),
+        Triple("Betting", "bet range coach bet size", SettingsPage.COACHING),
+        Triple("Staying under the radar", "cover play heat pit", SettingsPage.COACHING),
+        Triple("Sound", "sound effects audio volume", SettingsPage.CONTROLS),
+        Triple("Vibration", "haptic", SettingsPage.CONTROLS),
+        Triple("Left-handed", "controls hand", SettingsPage.CONTROLS),
+        Triple("Answer by voice", "microphone speak", SettingsPage.CONTROLS),
+        Triple("Fold screen", "flex mode seated view inner cover", SettingsPage.CONTROLS),
+        Triple("App updates", "update install download version", SettingsPage.DATA),
+        Triple("Daily reminder", "notification practice reminder", SettingsPage.DATA),
+        Triple("Backup and restore", "export import save", SettingsPage.DATA),
+        Triple("Quick tour", "help tutorial", SettingsPage.DATA),
+    )
+
+    fun find(q: String): List<Pair<String, SettingsPage>> {
+        val words = q.lowercase().trim().split(" ").filter { it.isNotEmpty() }
+        return ITEMS.filter { (label, keys, _) -> words.all { w -> label.lowercase().contains(w) || keys.contains(w) } }.map { it.first to it.third }
     }
 }

@@ -28,6 +28,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,11 +41,11 @@ import com.hilotrainer.engine.Achievements
 import com.hilotrainer.engine.Cast
 import com.hilotrainer.engine.CasualDealers
 
-val CasualTabs = listOf("Table", "Look", "Options", "Stats", "Awards", "Regulars", "Nights", "Run")
+val CasualTabs = listOf("Games", "Table", "Settings", "Me")
 
 /** Just Play's menu: rules, looks, options, stats, achievements and who's who. */
 @Composable
-fun CasualMenu(vm: CasualViewModel, tab: Int, onTab: (Int) -> Unit, onClose: () -> Unit) {
+fun CasualMenu(vm: CasualViewModel, tab: Int, onTab: (Int) -> Unit, part: Int = 0, onClose: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
         Column(
             Modifier.widthIn(max = 640.dp).fillMaxWidth().fillMaxSize().padding(horizontal = 10.dp, vertical = 16.dp)
@@ -65,14 +67,10 @@ fun CasualMenu(vm: CasualViewModel, tab: Int, onTab: (Int) -> Unit, onClose: () 
             }
             Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (tab) {
-                    0 -> TableTab(vm)
-                    1 -> LookTab(vm)
+                    0 -> GamesTab(vm, onClose, part)
+                    1 -> TableTab(vm)
                     2 -> OptionsTab(vm)
-                    3 -> StatsTab(vm)
-                    4 -> AwardsTab(vm)
-                    5 -> RegularsTab()
-                    6 -> NightsTab(vm)
-                    else -> RunTab(vm, onClose)
+                    else -> MeTab(vm, part)
                 }
             }
         }
@@ -126,6 +124,64 @@ private fun TableTab(vm: CasualViewModel) {
         "Side bets pay: Perfect Pairs 25 to 1 same suit, 12 to 1 same color, 6 to 1 mixed. 21+3 pays 100 to 1 suited three of a kind, 40 to 1 straight flush, 30 to 1 three of a kind, 10 to 1 straight, 5 to 1 flush.",
         fontSize = 12.sp, color = Cream.copy(alpha = 0.65f),
     )
+    Heading("LOOK")
+    LookTab(vm)
+}
+
+@Composable
+private fun Heading(text: String) {
+    Text(text, fontSize = 12.sp, letterSpacing = 2.sp, color = Gold, modifier = Modifier.padding(top = 8.dp))
+}
+
+/** A short row of pill choices for switching between the parts of a tab. */
+@Composable
+private fun SubTabs(options: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0x22FFFFFF))) {
+        options.forEachIndexed { i, o ->
+            Box(
+                Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(12.dp)).background(if (i == selected) Color(0xFF3A5F4C) else Color.Transparent).clickable { onPick(i) },
+                contentAlignment = Alignment.Center,
+            ) { Text(o, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (i == selected) Gold else Cream, maxLines = 1) }
+        }
+    }
+}
+
+/** Everything you can play besides the open table: the Rogue Run, the story nights, and how the side games work. */
+@Composable
+private fun GamesTab(vm: CasualViewModel, onClose: () -> Unit, start: Int = 0) {
+    var part by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(start) }
+    SubTabs(listOf("Rogue Run", "Story Nights", "Side games"), part) { part = it }
+    when (part) {
+        0 -> RunTab(vm, onClose)
+        1 -> NightsTab(vm)
+        else -> SideGamesInfo()
+    }
+}
+
+@Composable
+private fun SideGamesInfo() {
+    Text("Side games", fontSize = 20.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
+    Text("Tap the Side bets circle at the table to play Perfect Pairs, 21+3, Lucky Ladies and Next Card. Turn the spots on in Table, rules.", fontSize = 14.sp, color = Cream.copy(alpha = 0.85f))
+    Heading("PAYOUTS")
+    Text("Perfect Pairs: 25 to 1 same suit, 12 to 1 same color, 6 to 1 mixed.", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
+    Text("21+3: 100 to 1 suited three of a kind, 40 to 1 straight flush, 30 to 1 three of a kind, 10 to 1 straight, 5 to 1 flush.", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
+    Text("Lucky Ladies: 4, 9, 19 and 125 to 1 for 20 totals, matched 20s and the big hands.", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
+    Text("Next Card: Low 3 to 2, Seven 10 to 1, High 1 to 1.", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
+    Heading("POWER-UPS")
+    Text("Peek shows the dealer's hole card, Refund returns a lost bet, and Cover pays for a bust. They show under the felt when you have them, and they come from the wheel, comps and wins.", fontSize = 13.sp, color = Cream.copy(alpha = 0.8f))
+    Text("Casual only. None of it touches your training stats.", fontSize = 12.sp, color = Cream.copy(alpha = 0.6f))
+}
+
+/** Your record: numbers, awards, and the people at the tables. */
+@Composable
+private fun MeTab(vm: CasualViewModel, start: Int = 0) {
+    var part by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(start) }
+    SubTabs(listOf("Stats", "Awards", "Regulars"), part) { part = it }
+    when (part) {
+        0 -> StatsTab(vm)
+        1 -> AwardsTab(vm)
+        else -> RegularsTab()
+    }
 }
 
 @Composable
@@ -156,14 +212,17 @@ private fun LookTab(vm: CasualViewModel) {
 @Composable
 private fun OptionsTab(vm: CasualViewModel) {
     val s = vm.settings
+    Heading("COUNT AND HELP")
+    Toggle("Card count", s.showCount, "Shows the Hi-Lo running and true count in the top bar. The count keeps going for each room, even after you leave. Watch sits a round out so you can count without a bet.") { vm.update(s.copy(showCount = it)) }
+    Toggle("Hint button", s.hints, "Shows a Hint button that suggests the basic strategy play. Off by default.") { vm.update(s.copy(hints = it)) }
+    Toggle("Offer insurance", s.offerInsurance, "When the dealer shows an ace.") { vm.update(s.copy(offerInsurance = it)) }
+    Heading("TABLE TALK")
+    Toggle("Table talk", s.tableTalk, "Players chat, react and tease each other.") { vm.update(s.copy(tableTalk = it)) }
+    Seg("Chat style", listOf("Lane", "Bubbles", "Caption", "Log", "Float"), s.chatStyle, "How table talk appears. Try each one.") { vm.update(s.copy(chatStyle = it)) }
+    Heading("SOUND AND PACE")
     Toggle("Sound", s.sound) { vm.update(s.copy(sound = it)) }
     Toggle("Vibration", s.haptics) { vm.update(s.copy(haptics = it)) }
     Seg("Deal speed", listOf("Relaxed", "Normal", "Fast"), s.speed, "Each dealer also has their own pace.") { vm.update(s.copy(speed = it)) }
-    Toggle("Table talk", s.tableTalk, "Players chat, react and tease each other.") { vm.update(s.copy(tableTalk = it)) }
-    Seg("Chat style", listOf("Lane", "Bubbles", "Caption", "Log", "Float"), s.chatStyle, "How table talk appears. Try each one.") { vm.update(s.copy(chatStyle = it)) }
-    Toggle("Card count", s.showCount, "Shows the Hi-Lo running and true count in the top right corner. The count keeps going for each room, even after you leave. Watch sits a round out so you can count without a bet.") { vm.update(s.copy(showCount = it)) }
-    Toggle("Hint button", s.hints, "Shows a Hint button that suggests the basic strategy play. Off by default.") { vm.update(s.copy(hints = it)) }
-    Toggle("Offer insurance", s.offerInsurance, "When the dealer shows an ace.") { vm.update(s.copy(offerInsurance = it)) }
     Text("Power-ups and mini games are casual only. They never touch your training stats. Just Play has no quizzes and no coaching. The count is off unless you turn it on. Your training settings are separate and unchanged.", fontSize = 12.sp, color = Cream.copy(alpha = 0.65f))
 }
 
@@ -235,7 +294,7 @@ private fun Person(look: com.hilotrainer.engine.Look, name: String, kind: String
 /** The roguelike run: a way in, and what it is. */
 @Composable
 private fun RunTab(vm: CasualViewModel, onClose: () -> Unit) {
-    Text("The Run", fontSize = 20.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
+    Text("Rogue Run", fontSize = 20.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, color = Gold)
     Text(
         "A roguelike mode. Beat a chip target in a few hands to clear each blind, earn money, and buy perks that bend the scoring. " +
             "Stack them, find combos, and survive the boss blinds with their rule twists. Six antes of three blinds each.",
@@ -243,5 +302,5 @@ private fun RunTab(vm: CasualViewModel, onClose: () -> Unit) {
     )
     Text("Some perks reward counting: the Spotter shows the Hi-Lo running count and Card Sharp pays when the true count is high.", fontSize = 13.sp, color = Cream.copy(alpha = 0.7f))
     Text("Casual only. It plays on its own shoe and never touches your training stats.", fontSize = 12.sp, color = Cream.copy(alpha = 0.6f))
-    GoldButton(if (vm.store.runSave.isNullOrBlank()) "Start a run" else "Open the run", Modifier.fillMaxWidth()) { vm.runOpen = true; onClose() }
+    GoldButton(if (vm.store.runSave.isNullOrBlank()) "Start a Rogue Run" else "Open your Rogue Run", Modifier.fillMaxWidth()) { vm.runOpen = true; onClose() }
 }

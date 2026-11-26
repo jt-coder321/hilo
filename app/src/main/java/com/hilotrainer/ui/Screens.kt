@@ -67,7 +67,7 @@ enum class Screen(val title: String) {
     DASHBOARD("Stats dashboard"), BADGES("Badges and bests"), WEEKLY("Weekly goal"), QUICK_DRILL("1-minute drill"),
     HAPTIC_DRILL("Haptic count drill"), DECK_ESTIMATE("Deck estimation"), KELLY("Kelly bet sizing"),
     CAREER("Career mode"), DAILY("Daily challenge"), SESSION("One-hour session"), MID_SHOE("Join mid-shoe"),
-    JUST_PLAY("Just Play"), HUB_TRAIN("Train"), HUB_LEARN("Learn"), HUB_MODES("Play modes"), HUB_PROGRESS("Progress"),
+    JUST_PLAY("Just Play"), HUB_TRAIN("Drills"), HUB_LEARN("Learn"), HUB_MODES("Challenges"), HUB_PROGRESS("Progress"),
 }
 
 

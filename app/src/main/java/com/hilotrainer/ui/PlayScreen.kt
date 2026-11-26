@@ -225,28 +225,31 @@ private fun TopRail(vm: PlayViewModel, onBack: () -> Unit, onLog: () -> Unit, on
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More", tint = Gold) }
             androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = FeltDark) {
+                MenuHeading("MODES")
                 MenuItem(if (vm.watching) "Stop watch mode" else "Watch mode (count only)", vm.watching || vm.bettingOpen) {
                     menu = false
                     if (vm.watching) vm.stopWatching() else vm.startWatching()
                 }
-                MenuItem("Count audit", true) { menu = false; onAudit() }
                 if (vm.mode == TableMode.NORMAL) {
                     MenuItem("Back-counting practice", vm.bettingOpen && !vm.watching) { menu = false; vm.startBackCount() }
                     MenuItem("Team play practice", vm.bettingOpen && !vm.watching) { menu = false; vm.startTeam() }
                 } else {
                     MenuItem("Back to normal play", true) { menu = false; vm.stopMode() }
                 }
-                MenuItem("Tip the dealer \$5", vm.bettingOpen && !vm.watching && !vm.needBuyIn && vm.state.bankroll >= 15) { menu = false; vm.tipDealer(5) }
-                MenuItem("Color up and leave", vm.bettingOpen && !vm.watching && !vm.needBuyIn) { menu = false; vm.colorUp() }
-                MenuItem("Leave table (new shoe)", vm.bettingOpen && !vm.watching) { menu = false; vm.leaveTable() }
-                MenuItem("Join a table mid-shoe", vm.bettingOpen && !vm.watching && vm.system.balanced) { menu = false; vm.joinMidShoe() }
                 if (!vm.sessionActive) MenuItem("Start a one-hour session", vm.bettingOpen && !vm.watching) { menu = false; vm.startSession() }
                 else {
                     MenuItem("Take a 5-minute break", vm.bettingOpen && !vm.onBreak) { menu = false; vm.takeBreak() }
                     MenuItem("End the session early", true) { menu = false; vm.stopSession(); onReport() }
                 }
-                MenuItem("Session report", true) { menu = false; onReport() }
+                MenuHeading("TABLE")
+                MenuItem("Tip the dealer \$5", vm.bettingOpen && !vm.watching && !vm.needBuyIn && vm.state.bankroll >= 15) { menu = false; vm.tipDealer(5) }
+                MenuItem("Join a table mid-shoe", vm.bettingOpen && !vm.watching && vm.system.balanced) { menu = false; vm.joinMidShoe() }
+                MenuItem("Leave table (new shoe)", vm.bettingOpen && !vm.watching) { menu = false; vm.leaveTable() }
+                MenuItem("Color up and leave", vm.bettingOpen && !vm.watching && !vm.needBuyIn) { menu = false; vm.colorUp() }
+                MenuHeading("REVIEW")
+                MenuItem("Count audit", true) { menu = false; onAudit() }
                 MenuItem("Coach log", true) { menu = false; onLog() }
+                MenuItem("Session report", true) { menu = false; onReport() }
             }
         }
     }
@@ -281,6 +284,11 @@ private fun HeatGauge(heat: Double) {
             Box(Modifier.fillMaxWidth(frac.coerceAtLeast(0.04f)).fillMaxHeight().background(col))
         }
     }
+}
+
+@Composable
+private fun MenuHeading(text: String) {
+    Text(text, fontSize = 11.sp, letterSpacing = 2.sp, color = Gold, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp))
 }
 
 @Composable
