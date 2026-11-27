@@ -1,0 +1,8 @@
+{
+  "versionCode": 40,
+  "versionName": "9.15.0",
+  "sha256": "62a16bcaa7931e97799780a50801e9940a22f55327772dcccfa7ecfe8c646e8a",
+  "sizeBytes": 8775146,
+  "notes": "Rogue Run: no more scrolling, Swap card, deck building (add, cut, train ranks), 2D table",
+  "apkUrl": "https://raw.githubusercontent.com/jt-coder321/hilo/updates/HiLoTrainer.apk"
+}
