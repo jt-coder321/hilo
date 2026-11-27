@@ -65,8 +65,8 @@ class RunTest {
             assertEquals(before, r.money)
             assertEquals(6, r.offers.size)
             assertEquals(1, r.offers.count { it.train != null })
-            assertEquals(3, r.offers.count { it.perk != null })
-            assertEquals(3, r.offers.mapNotNull { it.perk }.map { it.id }.toSet().size)
+            assertEquals(2, r.offers.count { it.perk != null })
+            assertEquals(2, r.offers.mapNotNull { it.perk }.map { it.id }.toSet().size)
         }
     }
 
@@ -309,5 +309,49 @@ class RunTest {
         val back = RunSave.restore(r.save(), Random(1))!!
         assertEquals(r.perks.map { it.id }, back.perks.map { it.id })
         assertEquals(r.money, back.money)
+    }
+
+    @Test fun swapReplacesTheLastCardAndCostsAToken() {
+        var swapped = 0
+        for (seed in 1..40) {
+            val r = Run(StartDeck.STANDARD, Random(seed)); r.startBlind(); r.deal(1)
+            if (!r.canSwap()) continue
+            val before = r.gs.hands[0].cards
+            val tokens = r.swaps
+            assertTrue(r.swap())
+            assertEquals(tokens - 1, r.swaps)
+            if (r.inRound) { val after = r.gs.hands[0].cards; assertEquals(before.size, after.size); assertEquals(before.first(), after.first()) }
+            swapped++
+        }
+        assertTrue(swapped > 5)
+    }
+
+    @Test fun deckEditsChangeTheShoeAndSurviveASave() {
+        val r = Run(StartDeck.STANDARD, Random(3))
+        val total = r.game.shoe.totalCards
+        r.shoeAdjust[Rank.ACE.ordinal] = 1; r.shoeAdjust[Rank.TWO.ordinal] = -4
+        r.game.shoe.shuffle()
+        assertEquals(total + 6 - 24, r.game.shoe.totalCards)
+        r.rankLv[Rank.SEVEN.ordinal] = 2
+        val back = RunSave.restore(r.save(), Random(4))!!
+        assertEquals(2, back.rankLv[Rank.SEVEN.ordinal])
+        assertEquals(1, back.shoeAdjust[Rank.ACE.ordinal])
+        assertEquals(-4, back.shoeAdjust[Rank.TWO.ordinal])
+        assertEquals(total - 18, back.game.shoe.totalCards)
+    }
+
+    @Test fun trainedRanksScoreExtraChips() {
+        var checked = false
+        for (seed in 1..80) {
+            val r = Run(StartDeck.STANDARD, Random(seed)); r.rankLv.fill(3); r.startBlind(); r.deal(1)
+            while (r.inRound) r.act(Action.STAND)
+            val ev = r.lastScore.firstOrNull { it.total > 0 } ?: continue
+            assertTrue(ev.triggers.any { it.perk.endsWith("s trained") && it.chips >= 90 }); checked = true; break
+        }
+        assertTrue(checked)
+    }
+
+    @Test fun deckOfferTextsHaveNoDashes() {
+        for (k in DeckKind.entries) for (rk in Rank.entries) { val o = Offer(null, null, edit = DeckEdit(k, rk)); listOf(o.name, o.desc).forEach { assertFalse(it, it.contains('—') || it.contains('–')) } }
     }
 }

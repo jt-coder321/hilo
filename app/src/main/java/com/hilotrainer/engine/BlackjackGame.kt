@@ -475,6 +475,17 @@ class BlackjackGame(
         advance()
     }
 
+    /** Roguelike swap: the last card you drew goes back and a fresh one replaces it. The old card was already seen, so it stays in the count. */
+    fun swapLast(): Boolean {
+        if (phase != Phase.PLAYER) return false
+        val h = hands.getOrNull(active) ?: return false
+        if (h.cards.size < 2 || h.isSplitAces) return false
+        val (c, s) = draw()
+        hands[active] = h.copy(cards = h.cards.dropLast(1) + c, seqs = h.seqs.dropLast(1) + s)
+        advance()
+        return true
+    }
+
     private fun advance() {
         while (active < hands.size) {
             var h = hands[active]

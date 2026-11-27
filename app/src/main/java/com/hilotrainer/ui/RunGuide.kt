@@ -27,10 +27,11 @@ import androidx.compose.ui.unit.sp
 private class Step(val title: String, val body: String, val color: Color)
 
 private val Steps = listOf(
+    Step("What am I playing with?", "Two things. MONEY ($) is what you spend in the shop and what you lose when a hand loses. POINTS are what you score by winning hands. You need enough points to beat each blind before your hands run out.", Color(0xFFFF8A8A)),
     Step("The goal", "Every blind has a score to reach. Reach it before you run out of hands. Clear a Small Blind, a Big Blind and a Boss Blind to finish a round. Finish 6 rounds to win the run.", Color(0xFFFFD35A)),
-    Step("One hand is one hand of blackjack", "Play it like normal: Hit, Stand, Double or Split. Win the hand and it scores points. Lose it and you score nothing and pay a little money.", Color(0xFF3DDC84)),
+    Step("One hand is one hand of blackjack", "Play it like normal: Hit, Stand, Double or Split. Win the hand and it scores points. Lose it and you score nothing and pay your bet in money. A tie costs nothing.", Color(0xFF3DDC84)),
     Step("Score = Chips x Mult", "Chips (blue) are the base points. Mult (red) multiplies them. A win worth 100 chips with 3 mult scores 300. Perks make either number bigger.", Color(0xFF5ED0FF)),
-    Step("Bet size", "Stake 1, 2 or 3 is your bet. A bigger bet means more chips when you win, but a loss costs more money.", Color(0xFFFFB84D)),
+    Step("Bet size", "You pick Stake 1, 2 or 3 before each hand. Stake 2 means a win scores double the points, and a loss costs $2. Winning does not pay you money. It scores points. Only losses take money.", Color(0xFFFFB84D)),
     Step("Perks", "Perks are little powers that make your wins score more or earn you money. You can hold 5. Tap one to read it, sell it or move it. Order matters for Copycat.", Color(0xFFD59CFF)),
     Step("Special wins score more", "A dealer bust, a 21, a double down, a split, five cards or a blackjack each start with more chips and mult than a plain win. Train a kind in the shop to make it stronger.", Color(0xFFFF8A8A)),
     Step("Money and the shop", "You earn money for clearing blinds, finishing bonus goals and from some perks. Spend it in the shop on perks, hand training and Perk Packs. Keep some cash: you earn $1 interest for every $5 you hold.", Color(0xFFFFD35A)),

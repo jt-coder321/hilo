@@ -15,6 +15,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,6 +68,7 @@ import com.hilotrainer.engine.HandCtx
 import com.hilotrainer.engine.HandType
 import com.hilotrainer.engine.Outcome
 import com.hilotrainer.engine.Perk
+import com.hilotrainer.engine.Rank
 import com.hilotrainer.engine.Rarity
 import com.hilotrainer.engine.Run
 import com.hilotrainer.engine.RunPhase
@@ -214,6 +217,7 @@ class RunVm(val store: CasualStore, private val rnd: Random = Random.Default) {
 
     fun deal() { sa.clear(); sfx(Fx.CHIP, 1f); mut { deal(stakePick) } }
     fun act(a: Action) { mut { act(a) } }
+    fun swap() { sfx(Fx.CHIP, 1.3f); mut { swap() } }
     fun leaveRun() { run = null; animating = false; rev++ }
 
     private fun step(ms: Long): Long = if (fast) 0 else ms
@@ -382,45 +386,40 @@ private fun StartPane(vm: RunVm) {
     vm.rev
     val live = animOn
     val bob = if (live) rememberInfiniteTransition(label = "logo").animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Reverse), label = "b").value else 0.5f
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            "ROGUE\nRUN", fontSize = 52.sp, lineHeight = 52.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold, textAlign = TextAlign.Center,
-            modifier = Modifier.graphicsLayer { rotationZ = (bob - 0.5f) * 5f; translationY = (bob - 0.5f) * 8f }.padding(top = 4.dp),
+            "ROGUE RUN", fontSize = 34.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold, textAlign = TextAlign.Center,
+            modifier = Modifier.graphicsLayer { rotationZ = (bob - 0.5f) * 3f; translationY = (bob - 0.5f) * 5f },
         )
-        Text(
-            "Beat each blind's chip target before you run out of hands. Wins score chips x mult. Train your hand types, stack perks and editions, and clear ${Run.MAX_ANTE} antes to win.",
-            fontSize = 14.sp, color = Cream.copy(alpha = 0.88f), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 520.dp),
-        )
+        Text("Build a scoring engine. Beat each blind's target in a few hands.", fontSize = 13.sp, color = Cream.copy(alpha = 0.88f), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 520.dp))
         RankCard(vm.store, Modifier.widthIn(max = 520.dp))
-        if (vm.hasSave) ChunkyButton("Continue your Rogue Run", Color(0xFF2FA866), Modifier.widthIn(max = 420.dp).fillMaxWidth()) { vm.resume() }
-        if (vm.store.runWins > 0) Row(Modifier.widthIn(max = 520.dp).fillMaxWidth().chunky(if (vm.hardOn) Color(0xFF7A1E1E) else Color(0xFF241F3F), radius = 12.dp, lift = 2.dp).clip(RoundedCornerShape(12.dp)).clickable { vm.toggleHard() }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("HARD MODE  ${if (vm.hardOn) "ON" else "OFF"}", fontSize = 13.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (vm.hardOn) Color(0xFFFF8A8A) else Gold)
-                Text("Targets are 30% higher. Rank points are doubled.", fontSize = 11.sp, color = Cream.copy(alpha = 0.8f))
-            }
+        if (vm.hasSave) ChunkyButton("Continue your Rogue Run", Color(0xFF2FA866), Modifier.widthIn(max = 520.dp).fillMaxWidth()) { vm.resume() }
+        if (vm.store.runWins > 0) Row(Modifier.widthIn(max = 520.dp).fillMaxWidth().chunky(if (vm.hardOn) Color(0xFF7A1E1E) else Color(0xFF241F3F), radius = 12.dp, lift = 2.dp).clip(RoundedCornerShape(12.dp)).clickable { vm.toggleHard() }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("HARD MODE ${if (vm.hardOn) "ON" else "OFF"}  ·  targets +30%, rank points x2", fontSize = 12.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (vm.hardOn) Color(0xFFFF8A8A) else Gold, maxLines = 1)
         }
-        Text(if (vm.hasSave) "Or start a new one (this replaces the saved run)" else "Pick a starting deck", fontSize = 13.sp, color = Gold, fontFamily = Mono)
+        Text(if (vm.hasSave) "Or start a new one (replaces the saved run)" else "Pick a starting deck", fontSize = 12.sp, color = Gold, fontFamily = Mono)
         StartDeck.entries.forEach { d ->
             val ok = vm.unlocked(d)
             Column(
-                Modifier.widthIn(max = 520.dp).fillMaxWidth().chunky(Brush.verticalGradient(listOf(Color(if (ok) 0xFF2A2350 else 0xFF1B1B24), Color(if (ok) 0xFF191433 else 0xFF14141B))), radius = 16.dp)
-                    .clip(RoundedCornerShape(16.dp)).clickable(enabled = ok) { vm.sfx(Fx.DEAL, 1f); vm.start(d) }.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                Modifier.widthIn(max = 520.dp).fillMaxWidth().chunky(Brush.verticalGradient(listOf(Color(if (ok) 0xFF2A2350 else 0xFF1B1B24), Color(if (ok) 0xFF191433 else 0xFF14141B))), radius = 14.dp)
+                    .clip(RoundedCornerShape(14.dp)).clickable(enabled = ok) { vm.sfx(Fx.DEAL, 1f); vm.start(d) }.padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                Text(d.label, fontSize = 18.sp, fontWeight = FontWeight.Black, color = if (ok) Gold else Cream.copy(alpha = 0.5f))
-                Text(if (ok) d.desc else if (d.unlockRank > 0) "Locked. Reach rank ${RunMeta.title(d.unlockRank)} to unlock it." else "Locked. Reach Ante ${d.unlockAnte + 1} in any run to unlock it.", fontSize = 13.sp, color = Cream.copy(alpha = if (ok) 0.85f else 0.5f))
+                Text(d.label, fontSize = 16.sp, fontWeight = FontWeight.Black, color = if (ok) Gold else Cream.copy(alpha = 0.5f))
+                Text(if (ok) d.desc else if (d.unlockRank > 0) "Locked. Reach rank ${RunMeta.title(d.unlockRank)}." else "Locked. Reach Ante ${d.unlockAnte + 1} in any run.", fontSize = 12.sp, lineHeight = 14.sp, maxLines = 2, color = Cream.copy(alpha = if (ok) 0.85f else 0.5f))
             }
         }
         val found = vm.store.runSeen.split(',').count { it.isNotEmpty() }
         val goalsN = vm.store.runGoalsDone.split(',').count { it.isNotEmpty() }
-        Row(Modifier.widthIn(max = 520.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.widthIn(max = 520.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ChunkyButton("Perks $found/${com.hilotrainer.engine.Perks.ALL.size}", Color(0xFF9B5CE6), Modifier.weight(1f), small = true) { vm.codexOpen = true }
             ChunkyButton("Goals $goalsN/${RunMeta.GOALS.size}", Color(0xFFC9922A), Modifier.weight(1f), small = true) { vm.goalsOpen = true }
         }
-        ChunkyButton("How it works in plain words", Color(0xFF2E8BFF), Modifier.widthIn(max = 520.dp).fillMaxWidth(), small = true) { vm.guideOpen = true }
-        ChunkyButton("Run history", Color(0xFF6A4DE0), Modifier.widthIn(max = 520.dp).fillMaxWidth(), small = true) { vm.historyOpen = true }
-        Text("Best ante ${vm.store.runBest.coerceAtMost(Run.MAX_ANTE).coerceAtLeast(0)}  ·  Runs ${vm.store.runCount}  ·  Wins ${vm.store.runWins}  ·  Best hand ${fmt(vm.store.runBestHand)}", fontSize = 12.sp, color = Cream.copy(alpha = 0.7f), textAlign = TextAlign.Center)
-        Text("Casual only. Nothing here touches your training stats.", fontSize = 12.sp, color = Cream.copy(alpha = 0.55f))
+        Row(Modifier.widthIn(max = 520.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ChunkyButton("How it works", Color(0xFF2E8BFF), Modifier.weight(1f), small = true) { vm.guideOpen = true }
+            ChunkyButton("History", Color(0xFF6A4DE0), Modifier.weight(1f), small = true) { vm.historyOpen = true }
+        }
+        Text("Best ante ${vm.store.runBest.coerceAtMost(Run.MAX_ANTE).coerceAtLeast(0)}  ·  Runs ${vm.store.runCount}  ·  Wins ${vm.store.runWins}  ·  Casual only", fontSize = 11.sp, color = Cream.copy(alpha = 0.65f), textAlign = TextAlign.Center)
     }
 }
 
@@ -429,17 +428,16 @@ private fun StartPane(vm: RunVm) {
 @Composable
 private fun SelectPane(vm: RunVm, r: Run) {
     vm.rev
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        VenueHeader(r, if (r.isBoss) "I'm ${r.boss.name}. ${r.boss.desc}" else "Welcome to ${Venues.of(r.ante).name}. ${Venues.of(r.ante).tag}.")
-        JourneyMap(r, Modifier.widthIn(max = 560.dp))
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(if (r.isBoss) "${r.boss.name}: ${r.boss.desc}" else "${Venues.of(r.ante).name}  ·  ${Venues.of(r.ante).tag}", fontSize = 12.sp, color = if (r.isBoss) BossRed else Cream.copy(alpha = 0.8f), maxLines = 2, lineHeight = 14.sp, modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth())
         for (i in 0..2) BlindCard(vm, r, i)
+        Spacer(Modifier.weight(1f))
         Row(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("YOUR PERKS", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold, fontFamily = Mono, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            ChunkyButton("Hand levels", Color(0xFF6A4DE0), Modifier.width(130.dp), small = true) { vm.levelsOpen = true }
+            ChunkyButton("Hands + deck", Color(0xFF6A4DE0), Modifier.width(140.dp), small = true) { vm.levelsOpen = true }
         }
         PerkRow(vm, r, Modifier.widthIn(max = 560.dp))
         if (r.countNotes) Text("Count Notes are active: the running count shows in the next blind.", fontSize = 12.sp, color = Uncommon)
-        AmbientLounge(Venues.of(r.ante), Modifier.widthIn(max = 560.dp))
     }
 }
 
@@ -452,6 +450,17 @@ private fun BlindCard(vm: RunVm, r: Run, i: Int) {
     val name = boss?.name ?: Run.BLIND_NAMES[i]
     val target = r.targetFor(r.ante, i, r.boss)
     val col = if (i == 2) Color(0xFFD64545) else if (i == 1) Color(0xFF3A8DFF) else Color(0xFF2FA866)
+    if (!active) {
+        Row(
+            Modifier.widthIn(max = 560.dp).fillMaxWidth().graphicsLayer { alpha = 0.7f }.chunky(Brush.verticalGradient(listOf(Color(0xFF241F3F), Color(0xFF14112A))), radius = 12.dp, lift = 2.dp).clip(RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(Modifier.size(10.dp).background(col, RoundedCornerShape(50)))
+            Text(name, fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (done) "CLEARED" else "${fmt(target)} points  ·  \$${Run.REWARD[i]}", fontSize = 12.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (done) GoodGreen else Cream.copy(alpha = 0.85f))
+        }
+        return
+    }
     val live = animOn
     val bounce = if (active && live) rememberInfiniteTransition(label = "pick").animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse), label = "p").value else 0f
     Column(
@@ -534,7 +543,7 @@ private fun ScoreHud(vm: RunVm, r: Run, dark: Color) {
                 Text(r.blindName.uppercase(), fontSize = 10.sp, letterSpacing = 1.sp, color = bossCol, fontFamily = Mono, fontWeight = FontWeight.Black, maxLines = 1)
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(fmt(r.target), fontSize = 26.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color(0xFFFF6B5E))
-                    Text("to clear", fontSize = 11.sp, color = Cream.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 4.dp))
+                    Text("points to clear", fontSize = 11.sp, color = Cream.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 4.dp))
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -550,7 +559,7 @@ private fun ScoreHud(vm: RunVm, r: Run, dark: Color) {
             Box(Modifier.fillMaxWidth(frac).fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xFFFF8A3D), Color(0xFFFFD35A)))))
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("ROUND SCORE", fontSize = 10.sp, letterSpacing = 1.sp, color = Cream.copy(alpha = 0.7f), fontFamily = Mono, modifier = Modifier.weight(1f))
+            Text("POINTS SO FAR", fontSize = 10.sp, letterSpacing = 1.sp, color = Cream.copy(alpha = 0.7f), fontFamily = Mono, modifier = Modifier.weight(1f))
             val combo = r.comboNow
             if (combo > 0) Text("STREAK ${r.winStreak}  +${fmt1(combo)} mult", fontSize = 11.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color(0xFFFF8A3D), modifier = Modifier.padding(end = 8.dp))
             Text(fmt(shown), fontSize = 20.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold)
@@ -568,7 +577,7 @@ private fun ScoreHud(vm: RunVm, r: Run, dark: Color) {
         Row(Modifier.fillMaxWidth().heightIn(min = 46.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (label.isEmpty()) {
                 Text(
-                    sa.note.ifEmpty { if (r.inRound) "Hit, stand, double or split. Wins score chips x mult." else "Deal a hand. Wins score chips x mult." },
+                    sa.note.ifEmpty { if (r.inRound) "Beat the dealer to score points. If you lose this hand you pay \$${r.stake}." else "Win a hand to score points. Lose one and you pay \$${vm.stakePick}. You need ${(r.target - r.score).coerceAtLeast(0)} more points in ${r.handsLeft} ${if (r.handsLeft == 1) "hand" else "hands"}." },
                     fontSize = 13.sp, color = if (sa.note.isNotEmpty()) Color(0xFFFF9A9A) else Cream.copy(alpha = 0.7f), fontWeight = if (sa.note.isNotEmpty()) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.weight(1f), maxLines = 2,
                 )
@@ -721,6 +730,7 @@ private fun PlayControls(vm: RunVm, r: Run) {
     val busy = vm.animating
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (!r.inRound) {
+            if (!vm.animating) HandResultBanner(r)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 (1..3).forEach { s ->
                     val on = vm.stakePick == s
@@ -732,7 +742,7 @@ private fun PlayControls(vm: RunVm, r: Run) {
                         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text("STAKE $s", fontSize = 14.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (on) Ink else if (ok) Cream else Cream.copy(alpha = 0.4f))
-                        Text("x$s chips, -\$$s loss", fontSize = 10.sp, color = if (on) Ink.copy(alpha = 0.8f) else Cream.copy(alpha = if (ok) 0.7f else 0.35f))
+                        Text("win x$s points, lose \$$s", fontSize = 10.sp, color = if (on) Ink.copy(alpha = 0.8f) else Cream.copy(alpha = if (ok) 0.7f else 0.35f))
                     }
                 }
             }
@@ -744,7 +754,10 @@ private fun PlayControls(vm: RunVm, r: Run) {
                 ChunkyButton("Double", Color(0xFFC9922A), Modifier.weight(1f), enabled = r.canAct(Action.DOUBLE)) { vm.act(Action.DOUBLE) }
                 ChunkyButton("Split", Color(0xFF8A5CE6), Modifier.weight(1f), enabled = r.canAct(Action.SPLIT)) { vm.act(Action.SPLIT) }
             }
-            Text(if (r.activeBoss?.noDoubleSplit == true) "The Hook: no doubling or splitting." else "Stake ${r.stake}: wins score x${r.stake} chips.", fontSize = 11.sp, color = Cream.copy(alpha = 0.6f), modifier = Modifier.align(Alignment.CenterHorizontally))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(if (r.activeBoss?.noDoubleSplit == true) "The Hook: no doubling or splitting." else "Stake ${r.stake}: a win scores x${r.stake} points, a loss costs \$${r.stake}.", fontSize = 11.sp, color = Cream.copy(alpha = 0.6f), modifier = Modifier.weight(1f))
+                ChunkyButton("Swap card (${r.swaps})", Color(0xFF14A39A), Modifier.width(150.dp), enabled = r.canSwap(), small = true) { vm.swap() }
+            }
         }
     }
 }
@@ -765,8 +778,7 @@ private fun CashoutPane(vm: RunVm, r: Run) {
     Box(Modifier.fillMaxSize()) {
         CoinFlight(vm.sa.slam + 555)
         Burst(vm.sa.slam + 777, listOf(Color(0xFFFFD35A), Color(0xFF3DDC84), Color(0xFF5ED0FF), Color.White), originX = 0.5f, originY = 0.15f, count = 60)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            VenueHeader(r, "Well played. The house pays up.", title = "")
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("BLIND CLEARED", fontSize = 30.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Gold, modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value })
             Text("${fmt(r.score)} of ${fmt(r.target)}", fontSize = 16.sp, fontFamily = Mono, fontWeight = FontWeight.Bold, color = Cream)
             Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().chunky(Brush.verticalGradient(listOf(Color(0xFF241F3F), Color(0xFF14102A))), radius = 16.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -793,25 +805,29 @@ private fun CashoutPane(vm: RunVm, r: Run) {
 @Composable
 private fun ShopPane(vm: RunVm, r: Run) {
     vm.rev
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        VenueHeader(r, "Spend it wisely. Train a hand, buy a perk, or roll for a shiny one.", title = "THE SHOP")
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         val perkOffers = r.offers.withIndex().filter { it.value.perk != null }
-        Row(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            perkOffers.forEach { (i, o) -> ShopCard(vm, r, i, o, Modifier.weight(1f)) }
-            repeat(3 - perkOffers.size) { Spacer(Modifier.weight(1f)) }
+        val others = r.offers.withIndex().filter { it.value.perk == null }
+        val pack = others.firstOrNull { it.value.pack }
+        val rest = others.filter { it.value.pack.not() }
+        Row(Modifier.widthIn(max = 560.dp).fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            perkOffers.forEach { (i, o) -> ShopCard(vm, r, i, o, Modifier.weight(1f).fillMaxHeight()) }
+            pack?.let { (i, o) -> ShopTile(vm, r, i, o, Modifier.weight(1f).fillMaxHeight()) }
         }
-        r.offers.withIndex().filter { it.value.perk == null }.forEach { (i, o) -> ShopStrip(vm, r, i, o) }
+        Row(Modifier.widthIn(max = 560.dp).fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            rest.forEach { (i, o) -> ShopTile(vm, r, i, o, Modifier.weight(1f).fillMaxHeight()) }
+        }
         if (r.perks.size >= r.slots) Text("Your perk slots are full. Sell one to buy another.", fontSize = 12.sp, color = BadRed)
+        Spacer(Modifier.weight(1f))
         Row(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChunkyButton("Reroll \$${r.rerollCost}", Color(0xFF2E8BFF), Modifier.weight(1f), enabled = r.money >= r.rerollCost) { vm.sfx(Fx.RG_TICK, 1.2f); vm.mut { reroll() } }
             ChunkyButton("Next blind", Color(0xFFE5483F), Modifier.weight(1f)) { vm.sfx(Fx.DEAL, 1f); vm.mut { leaveShop() } }
         }
         Row(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("YOUR PERKS (tap to sell)", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold, fontFamily = Mono, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            ChunkyButton("Hand levels", Color(0xFF6A4DE0), Modifier.width(130.dp), small = true) { vm.levelsOpen = true }
+            ChunkyButton("Hands + deck", Color(0xFF6A4DE0), Modifier.width(140.dp), small = true) { vm.levelsOpen = true }
         }
         PerkRow(vm, r, Modifier.widthIn(max = 560.dp))
-        AmbientLounge(Venues.of(r.ante), Modifier.widthIn(max = 560.dp))
     }
 }
 
@@ -836,20 +852,18 @@ private fun ShopCard(vm: RunVm, r: Run, i: Int, o: com.hilotrainer.engine.Offer,
 }
 
 @Composable
-private fun ShopStrip(vm: RunVm, r: Run, i: Int, o: com.hilotrainer.engine.Offer) {
+private fun ShopTile(vm: RunVm, r: Run, i: Int, o: com.hilotrainer.engine.Offer, modifier: Modifier) {
     val ok = r.canBuy(i)
-    val train = o.train
-    val edge = if (train != null) Color(0xFF9B7BFF) else Color(0xFF5ED0FF)
-    Row(
-        Modifier.widthIn(max = 560.dp).fillMaxWidth().graphicsLayer { alpha = if (o.sold) 0.4f else 1f }.chunky(Brush.horizontalGradient(listOf(Color(0xFF2A2650), Color(0xFF16122B))), edge = edge, radius = 12.dp, lift = 3.dp).clip(RoundedCornerShape(12.dp)).padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    val edge = when { o.train != null -> Color(0xFF9B7BFF); o.edit != null -> Color(0xFFFF9A3D); o.pack -> Color(0xFFFFD35A); else -> Color(0xFF5ED0FF) }
+    val tag = when { o.train != null -> "HAND TRAINING"; o.edit != null -> "DECK"; o.pack -> "PACK"; else -> "TONIC" }
+    Column(
+        modifier.graphicsLayer { alpha = if (o.sold) 0.4f else 1f }.chunky(Brush.verticalGradient(listOf(Color(0xFF2A2650), Color(0xFF16122B))), edge = edge, radius = 12.dp, lift = 3.dp).clip(RoundedCornerShape(12.dp)).padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp), horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(if (train != null) "HAND TRAINING" else "TONIC", fontSize = 8.sp, letterSpacing = 1.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = edge)
-            Text(o.name, fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-            Text(o.desc, fontSize = 11.sp, color = Cream.copy(alpha = 0.85f), lineHeight = 13.sp)
-        }
-        ChunkyButton(if (o.sold) "SOLD" else "\$${o.cost}", Color(0xFF2FA866), Modifier.width(76.dp), enabled = ok, small = true) { vm.sfx(if (o.pack) Fx.RG_CHIME else Fx.RG_BUY, 1f); vm.mut { buy(i) } }
+        Text(tag, fontSize = 8.sp, letterSpacing = 1.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = edge)
+        Text(o.name, fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color.White, textAlign = TextAlign.Center, lineHeight = 14.sp, maxLines = 2)
+        Text(o.desc, fontSize = 10.sp, color = Cream.copy(alpha = 0.85f), lineHeight = 12.sp, textAlign = TextAlign.Center, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        ChunkyButton(if (o.sold) "SOLD" else "\$${o.cost}", Color(0xFF2FA866), Modifier.fillMaxWidth(), enabled = ok, small = true) { vm.sfx(if (o.pack) Fx.RG_CHIME else Fx.RG_BUY, 1f); vm.mut { buy(i) } }
     }
 }
 
@@ -901,6 +915,11 @@ private fun LevelsSheet(vm: RunVm, r: Run) {
                     Text(fmt1(r.baseMult(t)), fontSize = 13.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = Color.White, modifier = Modifier.chunky(MultRed, radius = 6.dp, lift = 2.dp, border = 1.5.dp).padding(horizontal = 6.dp, vertical = 1.dp))
                 }
             }
+            val adj = Rank.entries.filter { r.shoeAdjust[it.ordinal] != 0 }.joinToString(", ") { "${if (r.shoeAdjust[it.ordinal] > 0) "+" else "-"}${6 * kotlin.math.abs(r.shoeAdjust[it.ordinal])} ${it.label}s" }
+            val tr = Rank.entries.filter { r.rankLv[it.ordinal] > 0 }.joinToString(", ") { "${it.label}s Lv.${r.rankLv[it.ordinal]}" }
+            Text("YOUR DECK", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold, fontFamily = Mono, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 4.dp))
+            Text("Shoe changes: ${adj.ifEmpty { "none yet" }}", fontSize = 12.sp, color = Cream.copy(alpha = 0.85f))
+            Text("Trained ranks: ${tr.ifEmpty { "none yet" }}", fontSize = 12.sp, color = Cream.copy(alpha = 0.85f))
             ChunkyButton("Close", Color(0xFF3A3A5A), Modifier.fillMaxWidth().padding(top = 4.dp)) { vm.levelsOpen = false }
         }
     }
@@ -916,7 +935,7 @@ private fun EndPane(vm: RunVm, r: Run, onExit: () -> Unit) {
     LaunchedEffect(Unit) { vm.sfx(if (won) Fx.RG_FANFARE else Fx.RG_BUST, 1f); pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 300f)) }
     Box(Modifier.fillMaxSize()) {
         if (won) Burst(4242, listOf(Color(0xFFFFD35A), Color(0xFFFF6B5E), Color(0xFF5ED0FF), Color.White), originX = 0.5f, originY = 0.2f, count = 70)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(if (won) "YOU BEAT THE HOUSE" else "RUN OVER", fontSize = 30.sp, fontFamily = Mono, fontWeight = FontWeight.Black, color = if (won) Gold else BadRed, textAlign = TextAlign.Center, modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value })
             if (!won) Text(r.cause, fontSize = 14.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center)
             Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().chunky(Brush.verticalGradient(listOf(Color(0xFF241F3F), Color(0xFF14102A))), radius = 16.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -943,8 +962,7 @@ private fun EndPane(vm: RunVm, r: Run, onExit: () -> Unit) {
                 }
             }
             vm.lastReward?.let { RewardPanel(it, Modifier.widthIn(max = 460.dp)) }
-            Text("YOUR PERKS", fontSize = 12.sp, letterSpacing = 1.sp, color = Gold, fontFamily = Mono, fontWeight = FontWeight.Black)
-            Text(if (r.perks.isEmpty()) "None" else r.perks.joinToString(", ") { it.title }, fontSize = 13.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center)
+            Text("Perks: " + if (r.perks.isEmpty()) "none" else r.perks.joinToString(", ") { it.title }, fontSize = 12.sp, color = Cream.copy(alpha = 0.85f), textAlign = TextAlign.Center, maxLines = 3, modifier = Modifier.widthIn(max = 460.dp))
             ChunkyButton("New Rogue Run", Color(0xFF2FA866), Modifier.widthIn(max = 460.dp).fillMaxWidth()) { vm.leaveRun() }
             ChunkyButton("Back to the table", Color(0xFF3A3A5A), Modifier.widthIn(max = 460.dp).fillMaxWidth()) { onExit() }
         }

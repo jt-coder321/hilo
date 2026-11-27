@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -195,6 +196,10 @@ private fun DrawScope.drawPerson(
         close()
     }
     drawPath(body, shirtBrush)
+    // Bold dark outline and a cool rim light on the shoulders so the figure pops off the felt.
+    drawPath(body, Color(0xFF120A1A).copy(alpha = 0.85f), style = Stroke(w * 0.022f, join = StrokeJoin.Round))
+    drawPath(Path().apply { moveTo(cx - w * 0.41f, shoulderY + h * 0.07f); quadraticTo(cx - w * 0.37f, shoulderY - h * 0.01f, cx - w * 0.16f, shoulderY - h * 0.025f) }, Color(0xFFFFE9A8).copy(alpha = 0.55f), style = Stroke(w * 0.014f, cap = StrokeCap.Round))
+    drawPath(Path().apply { moveTo(cx + w * 0.41f, shoulderY + h * 0.07f); quadraticTo(cx + w * 0.37f, shoulderY - h * 0.01f, cx + w * 0.16f, shoulderY - h * 0.025f) }, Color(0xFF8FD8FF).copy(alpha = 0.5f), style = Stroke(w * 0.014f, cap = StrokeCap.Round))
     drawPath(body, Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.3f), Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.3f)), startX = cx - w * 0.44f, endX = cx + w * 0.44f))
     for (side in intArrayOf(-1, 1)) {
         val fold = Path().apply { moveTo(cx + side * w * 0.3f, shoulderY + h * 0.05f); quadraticTo(cx + side * w * 0.2f, shoulderY + h * 0.14f, cx + side * w * 0.26f, h * 0.97f) }
@@ -269,6 +274,8 @@ private fun DrawScope.drawPerson(
     }
     val face = facePath(cx, headY, R)
     drawPath(face, skinBrush)
+    drawPath(face, Color(0xFF120A1A).copy(alpha = 0.8f), style = Stroke(R * 0.07f, join = StrokeJoin.Round))
+    drawArc(Color(0xFFFFE9A8).copy(alpha = 0.5f), 200f, 50f, false, Offset(cx - rx * 0.96f, headY - R * 0.98f), Size(rx * 1.92f, R * 2.0f), style = Stroke(R * 0.05f, cap = StrokeCap.Round))
     // Gentle cheek and jaw shading, forehead highlight.
     drawPath(face, Brush.horizontalGradient(listOf(skinLo.copy(alpha = 0.4f), Color.Transparent, Color.Transparent, skinLo.copy(alpha = 0.4f)), startX = cx - rx, endX = cx + rx))
     drawOval(skinHi.copy(alpha = 0.35f), Offset(cx - R * 0.35f, top + R * 0.15f), Size(R * 0.7f, R * 0.4f))

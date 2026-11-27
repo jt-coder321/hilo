@@ -124,6 +124,14 @@ class CasualStore(context: Context?) {
     var runMotion: Boolean
         get() = int("run_motion", 1) == 1
         set(v) = put({ putInt("run_motion", if (v) 1 else 0) }, "run_motion" to (if (v) 1 else 0))
+    /** Rogue Run 3D table: off by default (flat table), falls back to the flat table if 3D cannot start. */
+    var run3d: Boolean
+        get() = int("run_3d_v2", 0) == 1
+        set(v) = put({ putInt("run_3d_v2", if (v) 1 else 0) }, "run_3d_v2" to (if (v) 1 else 0))
+    /** Why the 3D table last failed on this phone. Empty means it has not failed. */
+    var run3dWhy: String
+        get() = str("run_3d_why") ?: ""
+        set(v) = put({ putString("run_3d_why", v.take(300)) }, "run_3d_why" to v.take(300))
     /** Rogue Run effects quality: 0 low, 1 normal, 2 high. */
     var runQuality: Int
         get() = int("run_quality", 1).coerceIn(0, 2)

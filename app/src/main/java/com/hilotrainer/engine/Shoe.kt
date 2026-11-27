@@ -16,6 +16,8 @@ class Shoe(
     val system: CountSystem = CountSystem.HI_LO,
 ) {
     private val cards = ArrayList<Card>(decks * 52)
+    /** Roguelike deck building: extra (or fewer) cards of each rank per deck, indexed like Rank.entries. Applies on the next shuffle. */
+    val adjust = IntArray(13)
     private var next = 0
 
     var runningCount: Int = 0
@@ -30,7 +32,7 @@ class Shoe(
         shuffle()
     }
 
-    val totalCards: Int get() = decks * 52
+    val totalCards: Int get() = cards.size
     val cardsDealt: Int get() = next
     val cardsRemaining: Int get() = totalCards - next
     val decksRemaining: Double get() = cardsRemaining / 52.0
@@ -39,7 +41,7 @@ class Shoe(
     fun shuffle() {
         cards.clear()
         repeat(decks) {
-            for (s in Suit.entries) for (r in Rank.entries) cards.add(Card(r, s))
+            for (r in Rank.entries) for (k in 0 until (4 + adjust[r.ordinal]).coerceIn(0, 8)) cards.add(Card(r, Suit.entries[k % 4]))
         }
         cards.shuffle(random)
         next = 0

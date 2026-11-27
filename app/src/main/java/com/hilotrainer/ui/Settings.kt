@@ -317,6 +317,9 @@ private fun ControlsPage(s: AppSettings, update: (AppSettings) -> Unit) {
         Setting("Rogue Run sound effects", "Card deals, score ticks, perk chimes and stingers in Rogue Run. Effects only, no music.", runSound) { runSound = it; runStore.runSound = it }
         var runReduce by remember { mutableStateOf(!runStore.runMotion) }
         Setting("Rogue Run reduce motion", "Turns off Rogue Run animation, shakes and flashes. Also follows Android's animation setting.", runReduce) { runReduce = it; runStore.runMotion = !it }
+        var run3 by remember { mutableStateOf(runStore.run3d) }
+        val why3 = runStore.run3dWhy
+        Setting("Rogue Run 3D table", "A lit 3D table with 3D people. Turn off for the flat table if it ever stutters." + (if (why3.isNotEmpty()) " 3D did not start on this phone, so the flat table is showing. Turn this off and on to try again. Reason: $why3" else ""), run3) { run3 = it; runStore.run3d = it; if (it) { runStore.run3dWhy = ""; Table3D.failed = false } }
         var runQ by remember { mutableStateOf(runStore.runQuality) }
         Setting("Rogue Run light effects", "Fewer particles and glows for a smoother table. Turn on if it ever stutters.", runQ == 0) { runQ = if (it) 0 else 1; runStore.runQuality = runQ }
         Setting("Rogue Run extra effects", "More particles, rays and glow. Needs light effects off.", runQ == 2) { runQ = if (it) 2 else 1; runStore.runQuality = runQ }
@@ -425,6 +428,8 @@ object SettingsIndex {
         Triple("Staying under the radar", "cover play heat pit", SettingsPage.COACHING),
         Triple("Sound", "sound effects audio volume", SettingsPage.CONTROLS),
         Triple("Vibration", "haptic", SettingsPage.CONTROLS),
+        Triple("Rogue Run 3D table", "rogue run 3d table people black flat", SettingsPage.CONTROLS),
+        Triple("Rogue Run effects", "rogue run sound effects reduce motion light extra animation", SettingsPage.CONTROLS),
         Triple("Left-handed", "controls hand", SettingsPage.CONTROLS),
         Triple("Answer by voice", "microphone speak", SettingsPage.CONTROLS),
         Triple("Fold screen", "flex mode seated view inner cover", SettingsPage.CONTROLS),

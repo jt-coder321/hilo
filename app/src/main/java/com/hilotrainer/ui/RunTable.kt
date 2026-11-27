@@ -274,22 +274,30 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
         else -> Mood.HAPPY
     }
 
-    Box(modifier.clip(RoundedCornerShape(22.dp)).woodRail().padding(5.dp)) {
-        BoxWithConstraints(Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)).venueFelt(venue, r.isBoss)) {
+    val use3d = Table3D.enabled && vm.store.run3d && vm.store.run3dWhy.isEmpty() && !Table3D.failed
+    Box(modifier.then(if (use3d) Modifier else Modifier.clip(RoundedCornerShape(22.dp))).woodRail().padding(5.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize().then(if (use3d) Modifier else Modifier.clip(RoundedCornerShape(18.dp))).then(if (use3d) Modifier.background(venue.bg) else Modifier.venueFelt(venue, r.isBoss))) {
             val w = maxWidth; val h = maxHeight
+            if (use3d) {
+                val stageJson = remember(r.ante, r.blind, r.boss.id, vm.store.runMotion, vm.store.runQuality) { Table3D.stage(venue, dealer, seats, r.isBoss, vm.store.runMotion, vm.store.runQuality) }
+                Table3DLayer(stageJson, { why -> Table3D.why = why; Table3D.failed = true; vm.store.run3dWhy = why }, Modifier.fillMaxSize())
+            }
             // The dealer, behind the table.
             val dav = minOf(h * 0.21f, w * 0.27f)
             val dTop = h * 0.01f
-            val dcw = minOf(h * 0.115f, w * 0.13f)
-            Avatar(dealer.look, dav, mood = dealerMood, talking = dealerQuote.isNotEmpty(), dealer = true, name = dealer.name, gazeY = 0.6f, modifier = Modifier.offset(w / 2 - dav / 2, dTop))
+            val dcw = minOf(h * 0.115f, w * 0.13f) * (if (use3d) 0.88f else 1f)
+            if (!use3d) {
+                Box(Modifier.offset(w / 2 - dav * 0.8f, dTop - dav * 0.1f).size(dav * 1.6f).background(Brush.radialGradient(listOf(Color(0x55FFE9A8), Color.Transparent))))
+                Avatar(dealer.look, dav, mood = dealerMood, talking = dealerQuote.isNotEmpty(), dealer = true, name = dealer.name, gazeY = 0.6f, modifier = Modifier.offset(w / 2 - dav / 2, dTop))
+            }
             Column(Modifier.offset(8.dp, dTop + 2.dp).width(w / 2 - dav / 2 - 12.dp), horizontalAlignment = Alignment.Start) {
                 Shoe(34.dp, gs.cardsDealt, gs.totalCards)
                 Text(dealer.name, fontSize = 11.sp, fontWeight = FontWeight.Black, color = if (dealer.boss) BossTag else Gold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(if (dealer.boss) "Boss" else "Dealer", fontSize = 9.sp, color = Cream.copy(alpha = 0.6f))
             }
-            Bubble(dealerQuote, Modifier.offset(w / 2 + dav / 2 + 2.dp, dTop + 26.dp).width(w / 2 - dav / 2 - 8.dp))
+            Bubble(dealerQuote, Modifier.offset(w / 2 + dav / 2 + 2.dp, (if (use3d) h * 0.12f else dTop + 26.dp)).width(w / 2 - dav / 2 - 8.dp))
             // Dealer cards.
-            val dHandTop = dTop + dav - h * 0.012f
+            val dHandTop = if (use3d) h * 0.47f else dTop + dav - h * 0.012f
             Box(Modifier.offset(0.dp, dHandTop).width(w), contentAlignment = Alignment.TopCenter) {
                 val cards = dCards
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -310,7 +318,7 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
             val seatW = w * 0.32f
             for (s in 0..1) {
                 val m = seats[s]
-                val cx = if (s == 0) w * 0.17f else w * 0.83f
+                val cx = if (use3d) (if (s == 0) w * 0.2f else w * 0.8f) else if (s == 0) w * 0.17f else w * 0.83f
                 val hand = if (round) gs.bots.getOrNull(s) else null
                 val res = if (over) gs.botResults.getOrNull(s)?.outcome else null
                 val quote = when {
@@ -318,8 +326,11 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
                     !round && r.handsLeft == r.handsMax -> RunTalk.pick(RunTalk.BOT_HI, r.ante + r.blind * 5 + s * 3)
                     else -> ""
                 }
-                Avatar(m.look, ba, mood = moodFor(res), talking = quote.isNotEmpty() && !over, name = m.name, gazeX = if (s == 0) 0.6f else -0.6f, gazeY = 0.3f, modifier = Modifier.offset(cx - ba / 2, bTop))
-                Box(Modifier.offset(cx - seatW / 2, bTop + ba - 4.dp).width(seatW), contentAlignment = Alignment.TopCenter) {
+                if (!use3d) {
+                    Box(Modifier.offset(cx - ba * 0.8f, bTop - ba * 0.1f).size(ba * 1.6f).background(Brush.radialGradient(listOf(Color(0x448FD8FF), Color.Transparent))))
+                    Avatar(m.look, ba, mood = moodFor(res), talking = quote.isNotEmpty() && !over, name = m.name, gazeX = if (s == 0) 0.6f else -0.6f, gazeY = 0.3f, modifier = Modifier.offset(cx - ba / 2, bTop))
+                }
+                Box(Modifier.offset(cx - seatW / 2, if (use3d) h * 0.53f else bTop + ba - 4.dp).width(seatW), contentAlignment = Alignment.TopCenter) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         if (hand != null && hand.cards.isNotEmpty()) TotalPill(hand.cards, res) else Box(Modifier.height(18.dp))
                         BotCards(hand?.cards ?: emptyList(), bcw, seatW, s, 0)
@@ -329,7 +340,7 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
                 }
             }
             // You.
-            val pTop = h * 0.665f
+            val pTop = if (use3d) h * 0.72f else h * 0.665f
             val many = gs.hands.size > 1
             val cwP = minOf(w * 0.17f, (h - pTop - 36.dp) / 1.4f, 76.dp).coerceAtLeast(34.dp)
             if (!round) {
@@ -337,7 +348,7 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
                     Box(Modifier.size(cwP * 0.95f).border(1.5.dp, venue.print.copy(alpha = 0.5f), CircleShape).background(Color(0x22000000), CircleShape), contentAlignment = Alignment.Center) {
                         CasualChipStack(vm.stakePick * Run.UNIT, 24.dp)
                     }
-                    Text("Stake ${vm.stakePick}: wins score x${vm.stakePick} chips", fontSize = 11.sp, color = Cream.copy(alpha = 0.8f), modifier = Modifier.padding(top = 3.dp))
+                    Text("Stake ${vm.stakePick}: win = x${vm.stakePick} points, lose = -\$${vm.stakePick}", fontSize = 11.sp, color = Cream.copy(alpha = 0.8f), modifier = Modifier.padding(top = 3.dp))
                 }
             } else {
                 Box(Modifier.offset(0.dp, pTop).width(w), contentAlignment = Alignment.TopCenter) {
@@ -353,9 +364,9 @@ internal fun RunTable(vm: RunVm, r: Run, modifier: Modifier = Modifier) {
                         }
                     }
                 }
-                if (!many) Column(Modifier.offset(10.dp, pTop + 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (!many) Column(Modifier.offset(10.dp, pTop + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     CasualChipStack((if (r.inRound) r.stake else vm.stakePick) * Run.UNIT, 20.dp)
-                    Text("\$${(if (r.inRound) r.stake else vm.stakePick) * Run.UNIT}", fontSize = 10.sp, color = Cream.copy(alpha = 0.8f))
+                    Text("\$${(if (r.inRound) r.stake else vm.stakePick)} at risk", fontSize = 10.sp, color = Cream.copy(alpha = 0.8f))
                 }
             }
             if (r.countVisible) CountMeter(gs.runningCount, gs.trueCountExact, Modifier.align(Alignment.BottomEnd).padding(6.dp))

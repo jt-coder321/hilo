@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -165,7 +166,7 @@ abstract class JustPlayShotBase {
     abstract val tag: String
     private val outDir = File(System.getProperty("user.dir"), "build/screenshots").apply { mkdirs() }
 
-    @Before fun still() { CasualAnim.live = false }
+    @Before fun still() { CasualAnim.live = false; Table3D.enabled = false }
 
     private fun shoot(name: String, content: @Composable () -> Unit) {
         rule.setContent { HiLoTheme { Box(Modifier.fillMaxSize().background(Ink)) { content() } } }
@@ -585,6 +586,33 @@ abstract class JustPlayShotBase {
             if (!v.run!!.inRound) { v.stakePick = 2; v.deal() } else v.act(v.run!!.gs.basicAdvice!!.action.let { a -> if (v.run!!.canAct(a)) a else Action.STAND })
         }
         shoot("run-scored") { RunScreen(v.store, {}, v) }
+    }
+    private fun afterHand(name: String, seed: Int, wantWin: Boolean) {
+        val v = runVm(seed, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { startBlind() }
+        var g = 0
+        while (g++ < 200 && v.run!!.phase == com.hilotrainer.engine.RunPhase.PLAY) {
+            if (!v.run!!.inRound) {
+                val ls = v.run!!.lastScore
+                if (ls.isNotEmpty() && ls.any { it.total > 0 } == wantWin) break
+                v.stakePick = 1; v.deal()
+            } else v.act(v.run!!.gs.basicAdvice!!.action.let { a -> if (v.run!!.canAct(a)) a else Action.STAND })
+        }
+        v.animating = false
+        shoot(name) { RunScreen(v.store, {}, v) }
+    }
+    @Test fun runAfterWin() = afterHand("run-after-win", 21, true)
+    @Test fun runAfterLoss() = afterHand("run-after-loss", 22, false)
+    @Test fun runPlay3d() {
+        val v = runVm(4, com.hilotrainer.engine.StartDeck.STANDARD)
+        v.mut { skipBlind() }
+        v.mut { startBlind() }
+        var g = 0
+        while (g++ < 40 && !(v.run!!.inRound)) { v.stakePick = 2; v.deal() }
+        val bmp = android.graphics.BitmapFactory.decodeStream(javaClass.getResourceAsStream("/stage_preview.png"))
+        Table3D.enabled = true
+        Table3D.stub = { m -> androidx.compose.foundation.Image(bmp.asImageBitmap(), null, m, contentScale = androidx.compose.ui.layout.ContentScale.FillBounds) }
+        try { shoot("run-play-3d") { RunScreen(v.store, {}, v) } } finally { Table3D.enabled = false; Table3D.stub = null }
     }
     @Test fun runBossRoom() {
         val v = runVm(11, com.hilotrainer.engine.StartDeck.STANDARD)

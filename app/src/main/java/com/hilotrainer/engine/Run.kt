@@ -259,10 +259,14 @@ enum class Tonic(val label: String, val cost: Int, val desc: String) {
     COUNT("Count Notes", 3, "Shows the running count during the next blind."),
 }
 
-class Offer(val perk: Perk?, val tonic: Tonic?, var sold: Boolean = false, val train: HandType? = null, val trainLevel: Int = 0, val pack: Boolean = false) {
-    val name: String get() = perk?.title ?: tonic?.label ?: if (pack) "Perk Pack" else "Train ${train!!.label}"
-    val cost: Int get() = perk?.cost ?: tonic?.cost ?: if (pack) 5 else (3 + trainLevel)
-    val desc: String get() = perk?.desc ?: tonic?.desc ?: if (pack) "Open it and pick 1 of 3 perks. Better odds for shiny editions." else "Level ${trainLevel + 1}: ${train!!.label} wins get +${train.lvChips} chips and +${fmtM(train.lvMult)} mult."
+/** Deck building: change how the shoe is made or what a rank scores. */
+enum class DeckKind(val label: String) { TRAIN("Train"), ADD("Add"), CUT("Cut") }
+data class DeckEdit(val kind: DeckKind, val rank: Rank)
+
+class Offer(val perk: Perk?, val tonic: Tonic?, var sold: Boolean = false, val train: HandType? = null, val trainLevel: Int = 0, val pack: Boolean = false, val edit: DeckEdit? = null, val editLevel: Int = 0) {
+    val name: String get() = perk?.title ?: tonic?.label ?: edit?.let { e -> when (e.kind) { DeckKind.TRAIN -> "Train ${e.rank.label}s"; DeckKind.ADD -> "Add ${e.rank.label}s"; DeckKind.CUT -> "Cut ${e.rank.label}s" } } ?: if (pack) "Perk Pack" else "Train ${train!!.label}"
+    val cost: Int get() = perk?.cost ?: tonic?.cost ?: edit?.let { e -> when (e.kind) { DeckKind.TRAIN -> 4 + editLevel; DeckKind.ADD -> 5; DeckKind.CUT -> 3 } } ?: if (pack) 5 else (3 + trainLevel)
+    val desc: String get() = perk?.desc ?: tonic?.desc ?: edit?.let { e -> when (e.kind) { DeckKind.TRAIN -> "Every ${e.rank.label} in a winning hand scores +${Run.RANK_CHIPS} more chips (stacks)."; DeckKind.ADD -> "Puts 6 more ${e.rank.label}s into the shoe, one per deck."; DeckKind.CUT -> "Takes 6 ${e.rank.label}s out of the shoe, one per deck." } } ?: if (pack) "Open it and pick 1 of 3 perks. Better odds for shiny editions." else "Level ${trainLevel + 1}: ${train!!.label} wins get +${train.lvChips} chips and +${fmtM(train.lvMult)} mult."
     val rarity: Rarity get() = perk?.rarity ?: Rarity.COMMON
     private fun fmtM(d: Double) = if (d == d.toInt().toDouble()) "${d.toInt()}" else "$d"
 }
@@ -339,6 +343,8 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
         val BLIND_NAMES = listOf("Small Blind", "Big Blind", "Boss Blind")
         val REWARD = intArrayOf(3, 4, 5)
         const val SKIP_TAG = 4
+        const val RANK_CHIPS = 30
+        const val SWAPS = 2
         const val GOAL_PAY = 4
         val RULES = Rules(decks = 6, dealerHitsSoft17 = false, doubleAfterSplit = true, surrenderAllowed = false, maxHands = 4, penetration = 0.75)
     }
@@ -357,6 +363,10 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
     var goalsDone = 0; private set
     val slots: Int get() = SLOTS + extraSlots + perks.count { it.edition == Edition.NEGATIVE }
     var lastTrained: HandType? = null; private set
+    /** How far each rank has been trained (indexed like Rank.entries). */
+    val rankLv = IntArray(13)
+    var swaps = 0; private set
+    val shoeAdjust: IntArray get() = game.shoe.adjust
     fun level(t: HandType) = levels[t.ordinal]
     private val levelPower: Int get() = if (perks.any { it.id == "scholar" }) 2 else 1
     fun baseChips(t: HandType) = t.chips + level(t) * t.lvChips * levelPower
@@ -436,7 +446,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
             activeBoss?.onlyHands ?: 0 > 0 -> activeBoss!!.onlyHands
             else -> deck.hands + perks.sumOf { it.handsBonus } + bonusHands + permHands + (activeBoss?.handsDelta ?: 0) + (if (ante == 1) 1 else 0)
         }
-        handsLeft = handsMax; score = 0; winStreak = 0; losses = 0; lastStake = 0; netUsed = false
+        handsLeft = handsMax; swaps = SWAPS; score = 0; winStreak = 0; losses = 0; lastStake = 0; netUsed = false
         goal = if (handsMax <= 1) null else BlindGoal.entries[rnd.nextInt(BlindGoal.entries.size)]; goalDone = false
         lastScore = emptyList(); cashout = null; phase = RunPhase.PLAY
         return true
@@ -492,6 +502,16 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
         return when (a) { Action.DOUBLE -> o.canDouble; Action.SPLIT -> o.canSplit; Action.SURRENDER -> false; else -> true }
     }
 
+    fun canSwap(): Boolean = swaps > 0 && canAct(Action.HIT) && (game.state().hands.getOrNull(game.state().activeHand)?.let { it.cards.size >= 2 && !it.isSplitAces } == true)
+
+    /** Swap the last card you drew for a fresh one. */
+    fun swap(): Boolean {
+        if (!canSwap() || !game.swapLast()) return false
+        swaps--
+        if (game.state().phase == Phase.ROUND_OVER) settle()
+        return true
+    }
+
     fun act(a: Action): Boolean {
         if (!canAct(a)) return false
         game.act(a)
@@ -540,6 +560,10 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
                             Edition.POLY -> fx.hit(pk.title, "x1.5 mult", x = 1.5)
                             else -> {}
                         }
+                    }
+                    Rank.entries.forEach { rk ->
+                        val lv = rankLv[rk.ordinal]; val n = h.cards.count { it.rank == rk }
+                        if (lv > 0 && n > 0) fx.hit("${rk.label}s trained", "+${RANK_CHIPS * lv * n} chips", chips = RANK_CHIPS * lv * n)
                     }
                     val combo = comboFor(winStreak)
                     if (combo > 0) fx.hit("Win streak", "+${combo.toInt()} mult (${winStreak} in a row)", mult = combo)
@@ -612,7 +636,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
         val owned = perks.map { it.id }.toSet()
         val pool = Perks.ALL.filter { it.id !in owned }.toMutableList()
         val picks = mutableListOf<Offer>()
-        repeat(3) {
+        repeat(2) {
             if (pool.isEmpty()) return@repeat
             val total = pool.sumOf { it.rarity.weight }
             var roll = rnd.nextInt(total)
@@ -622,6 +646,9 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
             picks += Offer(pk.copyWith(edition = e), null)
         }
         picks += Offer(null, Tonic.entries[rnd.nextInt(Tonic.entries.size)])
+        val ek = DeckKind.entries[rnd.nextInt(DeckKind.entries.size)]
+        val er = when (ek) { DeckKind.CUT -> listOf(Rank.TWO, Rank.THREE, Rank.FOUR, Rank.FIVE, Rank.SIX, Rank.SEVEN, Rank.EIGHT)[rnd.nextInt(7)]; DeckKind.ADD -> listOf(Rank.ACE, Rank.TEN, Rank.KING, Rank.QUEEN, Rank.JACK, Rank.NINE)[rnd.nextInt(6)]; DeckKind.TRAIN -> Rank.entries[rnd.nextInt(13)] }
+        picks += Offer(null, null, edit = DeckEdit(ek, er), editLevel = rankLv[er.ordinal])
         val t = HandType.entries[rnd.nextInt(HandType.entries.size)]
         picks += Offer(null, null, train = t, trainLevel = level(t))
         picks += Offer(null, null, pack = true)
@@ -674,6 +701,11 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
         money -= o.cost; o.sold = true
         o.perk?.let { perks += it.copyWith(); maxPerks = maxOf(maxPerks, perks.size) }
         o.train?.let { levels[it.ordinal]++; lastTrained = it }
+        o.edit?.let { e ->
+            val i = e.rank.ordinal
+            when (e.kind) { DeckKind.TRAIN -> rankLv[i]++; DeckKind.ADD -> game.shoe.adjust[i] = (game.shoe.adjust[i] + 1).coerceAtMost(4); DeckKind.CUT -> game.shoe.adjust[i] = (game.shoe.adjust[i] - 1).coerceAtLeast(-4) }
+            if (e.kind != DeckKind.TRAIN) game.shoe.shuffle()
+        }
         if (o.pack) pack = rollPack()
         when (o.tonic) { Tonic.HAND -> bonusHands++; Tonic.COUNT -> countNotes = true; null -> {} }
         return true
@@ -713,6 +745,7 @@ class Run(val deck: StartDeck, private val rnd: Random = Random.Default, val har
         "2", deck.name, ante, blind, money, perks.joinToString(",") { "${it.id}@${it.edition.name}:${it.grow}" }, bonusHands, if (countNotes) 1 else 0,
         blindsCleared, bestHand, skips, if (phase == RunPhase.SHOP) 1 else 0, levels.joinToString(","),
         extraSlots, permHands, if (hard) 1 else 0, goalsDone, maxPerks,
+        rankLv.joinToString(","), game.shoe.adjust.joinToString(","),
     ).joinToString("|")
 
     /** True while it is safe to save: not in the middle of a blind. */
@@ -752,6 +785,11 @@ object RunSave {
             r.setState(p[2].toInt(), p[3].toInt(), p[4].toInt(), p[6].toInt(), p[7] == "1", p[8].toInt(), p[9].toInt(), p[10].toInt(), p[11] == "1")
             if (p[0] == "2" && p.size > 12) r.setLevels(p[12].split(",").mapNotNull { it.toIntOrNull() })
             if (p.size > 17) r.setExtras(p[13].toInt(), p[14].toInt(), p.getOrNull(16)?.toIntOrNull() ?: 0, p.getOrNull(17)?.toIntOrNull() ?: 0)
+            if (p.size > 19) {
+                p[18].split(",").mapNotNull { it.toIntOrNull() }.forEachIndexed { i, v -> if (i < 13) r.rankLv[i] = v }
+                p[19].split(",").mapNotNull { it.toIntOrNull() }.forEachIndexed { i, v -> if (i < 13) r.shoeAdjust[i] = v.coerceIn(-4, 4) }
+                r.game.shoe.shuffle()
+            }
             r
         } catch (e: Exception) { null }
     }
